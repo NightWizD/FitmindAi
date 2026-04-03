@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/constants/api_constants.dart';
 
 class ActivityLevelSelectionScreen extends StatefulWidget {
   const ActivityLevelSelectionScreen({super.key});
@@ -45,7 +46,7 @@ class _ActivityLevelSelectionScreenState extends State<ActivityLevelSelectionScr
     }
 
     final response = await http.put(
-      Uri.parse('http://10.0.2.2:8000/api/v1/user/update-metrics'),
+      Uri.parse('${ApiConstants.baseUrl}/user/update-metrics'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',

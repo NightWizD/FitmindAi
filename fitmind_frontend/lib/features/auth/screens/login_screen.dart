@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/constants/api_constants.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -20,7 +21,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final response = await http.post(
-      Uri.parse('http://10.0.2.2:8000/api/v1/auth/login'),
+      Uri.parse('${ApiConstants.baseUrl}/auth/login'),
       headers: {
         'Content-Type': 'application/json',
       },
@@ -40,7 +41,7 @@ class _LoginScreenState extends State<LoginScreen> {
       
       // Get user info
       final userResponse = await http.get(
-        Uri.parse('http://10.0.2.2:8000/api/v1/auth/me'),
+        Uri.parse('${ApiConstants.baseUrl}/auth/me'),
         headers: {
           'Authorization': 'Bearer $token',
         },
@@ -53,7 +54,7 @@ class _LoginScreenState extends State<LoginScreen> {
         
         // Check if metrics exist
         final metricsResponse = await http.get(
-          Uri.parse('http://10.0.2.2:8000/api/v1/user/metrics'),
+          Uri.parse('${ApiConstants.baseUrl}/user/metrics'),
           headers: {
             'Authorization': 'Bearer $token',
           },

@@ -3,6 +3,7 @@ import '../../../widgets/bottom_nav_bar.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/constants/api_constants.dart';
 import 'workout_detail_screen.dart';
 
 class WorkoutScreen extends StatefulWidget {
@@ -40,7 +41,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     }
 
     final response = await http.get(
-      Uri.parse('http://10.0.2.2:8000/api/v1/workout/list'),
+      Uri.parse('${ApiConstants.baseUrl}/workout/list'),
       headers: {'Authorization': 'Bearer $token'},
     );
 
@@ -345,7 +346,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       }
 
       final response = await http.post(
-        Uri.parse('http://10.0.2.2:8000/api/v1/workout/generate'),
+        Uri.parse('${ApiConstants.baseUrl}/workout/generate'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
         body: json.encode({
           'gym_access': gymAccess,
@@ -446,7 +447,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     try {
       for (String planId in selectedPlans) {
         final response = await http.delete(
-          Uri.parse('http://10.0.2.2:8000/api/v1/workout/$planId'),
+          Uri.parse('${ApiConstants.baseUrl}/workout/$planId'),
           headers: {'Authorization': 'Bearer $token'},
         );
         if (response.statusCode != 200) {

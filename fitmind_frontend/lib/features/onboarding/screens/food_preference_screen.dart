@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/constants/api_constants.dart';
 
 class FoodPreferenceScreen extends StatefulWidget {
   const FoodPreferenceScreen({super.key});
@@ -44,7 +45,7 @@ class _FoodPreferenceScreenState extends State<FoodPreferenceScreen> {
     }
 
     final response = await http.post(
-      Uri.parse('http://10.0.2.2:8000/api/v1/user/food-preferences'),
+      Uri.parse('${ApiConstants.baseUrl}/user/food-preferences'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',

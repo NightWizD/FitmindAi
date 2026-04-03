@@ -4,6 +4,7 @@ import 'meal_screen.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/constants/api_constants.dart';
 
 class NutritionScreen extends StatefulWidget {
   const NutritionScreen({super.key});
@@ -374,7 +375,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
       }
 
       final response = await http.post(
-        Uri.parse('http://10.0.2.2:8000/api/v1/diet/generate'),
+        Uri.parse('${ApiConstants.baseUrl}/diet/generate'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
         body: json.encode({
           'food_preference': foodPreference,

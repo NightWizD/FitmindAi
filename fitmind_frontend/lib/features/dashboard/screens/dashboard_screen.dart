@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
+import '../../../core/constants/api_constants.dart';
 import 'package:pedometer/pedometer.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../widgets/bottom_nav_bar.dart';
@@ -81,7 +82,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final token = prefs.getString('token');
     if (token != null) {
       final response = await http.get(
-        Uri.parse('http://10.0.2.2:8000/api/v1/user/metrics'),
+        Uri.parse('${ApiConstants.baseUrl}/user/metrics'),
         headers: {'Authorization': 'Bearer $token'},
       );
 

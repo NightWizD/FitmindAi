@@ -3,6 +3,7 @@ import '../../../widgets/bottom_nav_bar.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/constants/api_constants.dart';
 
 class WorkoutDetailScreen extends StatefulWidget {
   final String planId;
@@ -34,7 +35,7 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     if (token == null) return;
 
     final response = await http.get(
-      Uri.parse('http://10.0.2.2:8000/api/v1/workout/${widget.planId}'),
+      Uri.parse('${ApiConstants.baseUrl}/workout/${widget.planId}'),
       headers: {'Authorization': 'Bearer $token'},
     );
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../../../core/constants/api_constants.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -24,7 +25,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       });
       try {
         final response = await http.post(
-          Uri.parse('http://10.0.2.2:8000/api/v1/auth/register'),
+          Uri.parse('${ApiConstants.baseUrl}/auth/register'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'username': _nameController.text,

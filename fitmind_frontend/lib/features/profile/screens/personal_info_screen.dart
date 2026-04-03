@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/constants/api_constants.dart';
 
 class PersonalInfoScreen extends StatefulWidget {
   const PersonalInfoScreen({super.key});
@@ -27,7 +28,7 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
       if (token == null) return;
 
       final response = await http.get(
-        Uri.parse('http://10.0.2.2:8000/api/v1/user/metrics'),
+        Uri.parse('${ApiConstants.baseUrl}/user/metrics'),
         headers: {
           'Authorization': 'Bearer $token',
         },

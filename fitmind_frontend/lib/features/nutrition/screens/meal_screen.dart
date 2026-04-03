@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../widgets/bottom_nav_bar.dart';
+import '../../../core/constants/api_constants.dart';
 import 'meal_detail_screen.dart';
 
 class MealScreen extends StatefulWidget {
@@ -39,7 +40,7 @@ class _MealScreenState extends State<MealScreen> {
     }
 
     final response = await http.get(
-      Uri.parse('http://10.0.2.2:8000/api/v1/diet/list'),
+      Uri.parse('${ApiConstants.baseUrl}/diet/list'),
       headers: {'Authorization': 'Bearer $token'},
     );
 
@@ -128,7 +129,7 @@ class _MealScreenState extends State<MealScreen> {
     try {
       for (String planId in selectedPlans) {
         final response = await http.delete(
-          Uri.parse('http://10.0.2.2:8000/api/v1/diet/$planId'),
+          Uri.parse('${ApiConstants.baseUrl}/diet/$planId'),
           headers: {'Authorization': 'Bearer $token'},
         );
         if (response.statusCode != 200) {
@@ -337,7 +338,7 @@ class _MealScreenState extends State<MealScreen> {
       }
 
       final response = await http.post(
-        Uri.parse('http://10.0.2.2:8000/api/v1/diet/generate'),
+        Uri.parse('${ApiConstants.baseUrl}/diet/generate'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
         body: json.encode({
           'food_preference': 'veg',

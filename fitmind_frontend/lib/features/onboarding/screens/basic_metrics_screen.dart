@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/constants/api_constants.dart';
 
 class BasicMetricsScreen extends StatefulWidget {
   const BasicMetricsScreen({super.key});
@@ -40,7 +41,7 @@ class _BasicMetricsScreenState extends State<BasicMetricsScreen> {
     final double bmi = weight / ((height / 100) * (height / 100));
 
     final response = await http.post(
-      Uri.parse('http://10.0.2.2:8000/api/v1/user/metrics'),
+      Uri.parse('${ApiConstants.baseUrl}/user/metrics'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',

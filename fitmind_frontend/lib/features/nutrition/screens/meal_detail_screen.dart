@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../widgets/bottom_nav_bar.dart';
+import '../../../core/constants/api_constants.dart';
 
 class MealDetailScreen extends StatefulWidget {
   final String planId;
@@ -58,7 +59,7 @@ class _MealDetailScreenState extends State<MealDetailScreen> {
       }
 
       final response = await http.get(
-        Uri.parse('http://10.0.2.2:8000/api/v1/diet/${widget.planId}'),
+        Uri.parse('${ApiConstants.baseUrl}/diet/${widget.planId}'),
         headers: {'Authorization': 'Bearer $token'},
       );
 
