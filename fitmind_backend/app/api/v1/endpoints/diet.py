@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from motor import MotorDatabase
+from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.core.database import get_database
 from app.api.dependencies import get_current_user
 from app.services.gemini_service import generate_meal_plan
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 @router.post("/generate", response_model=dict)
 async def generate_meal_plan_endpoint(
     preferences: DietPreferences,
-    db: MotorDatabase = Depends(get_database),
+    db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -101,7 +101,7 @@ async def generate_meal_plan_endpoint(
 
 @router.get("/list", response_model=list)
 async def get_meal_plans(
-    db: MotorDatabase = Depends(get_database),
+    db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -128,7 +128,7 @@ async def get_meal_plans(
 @router.get("/{plan_id}", response_model=dict)
 async def get_meal_plan(
     plan_id: str,
-    db: MotorDatabase = Depends(get_database),
+    db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -165,7 +165,7 @@ async def get_meal_plan(
 @router.delete("/{plan_id}")
 async def delete_meal_plan(
     plan_id: str,
-    db: MotorDatabase = Depends(get_database),
+    db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(get_current_user)
 ):
     """
