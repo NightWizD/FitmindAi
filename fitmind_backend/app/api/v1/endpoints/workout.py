@@ -73,8 +73,6 @@ async def generate_workout(preferences: TrainingPreferences, current_user=Depend
     db = get_database()
     goals_doc = await db.user_goals.find_one({"user_id": str(current_user.id)})
     goals = goals_doc.get("goals", ["General Fitness"]) if goals_doc else ["General Fitness"]
-    weight_goal = goals_doc.get("weight_goal") if goals_doc else None
-    calories_goal = goals_doc.get("calories_goal") if goals_doc else None
 
     # Prepare user_data
     height_m = metrics.get("height", 170) / 100
@@ -86,9 +84,7 @@ async def generate_workout(preferences: TrainingPreferences, current_user=Depend
         "height": metrics.get("height", 170),
         "weight": metrics.get("weight", 70),
         "bmi": bmi,
-        "goals": goals,
-        "weight_goal": weight_goal,
-        "calories_goal": calories_goal,
+        "goal": goals[0] if goals else "General Fitness",
         "activity_level": metrics.get("activity_level", "Moderately Active")
     }
 

@@ -51,9 +51,7 @@ User Profile:
 - Height: {user_data.get('height', 170)} cm
 - Weight: {user_data.get('weight', 70)} kg
 - BMI: {bmi:.1f} ({bmi_category})
-- Fitness Goals: {', '.join(user_data.get('goals', ['General Fitness']))}
-- Target Weight: {user_data.get('weight_goal', 'N/A')} kg
-- Daily Calories Goal: {user_data.get('calories_goal', 'N/A')} kcal
+- Fitness Goal: {user_data.get('goal', 'General Fitness')}
 - Activity Level: {user_data.get('activity_level', 'Moderately Active')}
 
 Training Preferences:
@@ -135,7 +133,7 @@ Generate a UNIQUE workout plan for session {unique_seed} now:
         # Generate response
         logger.info("Calling Gemini AI for workout plan generation")
         response = client.models.generate_content(
-            model='gemini-2.0-flash-exp',
+            model='gemini-2.5-flash',
             contents=prompt
         )
 
@@ -302,31 +300,26 @@ SESSION: {unique_seed}
 USER PROFILE:
 - Age: {user_data.get('age', 25)}, Gender: {user_data.get('gender', 'Male')}
 - Height: {user_data.get('height', 170)}cm, Weight: {user_data.get('weight', 70)}kg, BMI: {bmi:.1f} ({bmi_category})
-- Fitness Goals: {', '.join(user_data.get('goals', ['General Fitness']))}
-- Target Weight: {user_data.get('weight_goal', 'N/A')} kg
-- Target Daily Calories: {user_data.get('calories_goal', 'N/A')} kcal
-- Activity Level: {user_data.get('activity_level', 'Moderately Active')}
+- Goal: {user_data.get('goal', 'General Fitness')}, Activity: {user_data.get('activity_level', 'Moderately Active')}
 
 PREFERENCES:
 - Food Type: {preferences.get('food_preference', 'veg')}
-- Daily Foods (Include these if possible): {', '.join(preferences.get('daily_foods', []))}
-- Allergies (STRICTLY AVOID): {', '.join(preferences.get('allergies', []))}
+- Daily Foods (must include if possible): {", ".join(preferences.get('daily_foods', [])) if preferences.get('daily_foods') else "None specific"}
+- Allergies (MUST AVOID): {", ".join(preferences.get('allergies', [])) if preferences.get('allergies') else "None"}
 - Meals per Day: {preferences.get('meals_per_day', 3)}
 
 CALCULATION METHOD:
 BMR = {10 * user_data.get('weight', 70) + 6.25 * user_data.get('height', 170) - 5 * user_data.get('age', 25) + (5 if user_data.get('gender', 'Male').lower() == 'male' else -161):.0f} calories
-TDEE = BMR × {1.55:.3f} (Adjusted for {user_data.get('activity_level', 'Moderately Active')})
+TDEE = BMR × {activity_multipliers.get(activity_level, 1.55):.3f} = {(10 * user_data.get('weight', 70) + 6.25 * user_data.get('height', 170) - 5 * user_data.get('age', 25) + (5 if user_data.get('gender', 'Male').lower() == 'male' else -161)) * activity_multipliers.get(activity_level, 1.55):.0f} calories
 
-TARGET CALORIES: 
-- Use {user_data.get('calories_goal', 'calculated TDEE')} as the base.
-- Adjust based on goals: {', '.join(user_data.get('goals', []))}.
-- If specific Calories Goal is provided ({user_data.get('calories_goal')}), prioritize it.
+TARGET CALORIES: {user_data.get('calories_goal') if user_data.get('calories_goal') else f"Adjust TDEE by goal ({goal}) for optimal results."} (Strictly aim to make daily_calories close to this)
 
 MACROS: {protein_ratio*100:.0f}% Protein, {carb_ratio*100:.0f}% Carbs, {fat_ratio*100:.0f}% Fats
 
 REQUIREMENTS:
 - Create {preferences.get('meals_per_day', 3)} meals with specific quantities
-- Respect food preference and avoid allergies
+- Respect food preference and STRICTLY AVOID allergies
+- MUST incorporate the provided 'Daily Foods' reasonably across the meals
 - Include traditional Indian foods with modern nutrition
 - Balance nutrition based on goal and activity level
 - Return ONLY valid JSON
@@ -350,17 +343,18 @@ Generate unique plan for session {unique_seed}:
         # Initialize Gemini model
         try:
             # List available models for debugging
-            models = genai.list_models()
+            models = client.models.list()
             available_models = [model.name for model in models if 'generateContent' in model.supported_generation_methods]
             logger.info(f"Available models with generateContent: {available_models}")
         except Exception as e:
             logger.error(f"Error listing models: {e}")
 
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
-
         # Generate response
         logger.info("Calling Gemini AI for meal plan generation")
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt
+        )
 
         if not response or not response.text:
             logger.error("No response from Gemini AI")
@@ -431,8 +425,11 @@ Generate unique plan for session {unique_seed}:
             'Endurance Training': tdee + 200
         }
 
-        target_calories = goal_calories.get(goal, tdee)
-        target_calories = max(1200, min(4000, target_calories))  # Clamp between 1200-4000 calories
+        if user_data.get('calories_goal'):
+            target_calories = user_data.get('calories_goal')
+        else:
+            target_calories = goal_calories.get(goal, tdee)
+            target_calories = max(1200, min(4000, target_calories))  # Clamp between 1200-4000 calories
 
         # Base meal structures with personalized portions
         if food_pref == 'veg':

@@ -32,13 +32,17 @@ async def generate_meal_plan_endpoint(
         if not user_metrics:
             raise HTTPException(status_code=400, detail="User metrics not found. Please complete your profile.")
 
-        # Fetch user goals and food preferences from dedicated collections
-        goals_doc = await db.user_goals.find_one({"user_id": str(current_user.id)})
-        food_prefs_doc = await db.user_food_preferences.find_one({"user_id": str(current_user.id)})
-
-        goals = goals_doc.get("goals", [user_metrics.get("goal", "General Fitness")]) if goals_doc else [user_metrics.get("goal", "General Fitness")]
-        weight_goal = goals_doc.get("weight_goal") if goals_doc else user_metrics.get("weight_goal")
-        calories_goal = goals_doc.get("calories_goal") if goals_doc else user_metrics.get("calories_goal")
+        # Get stored food preferences from the database
+        from app.services.auth_service import get_user_food_preferences
+        food_prefs_doc = await get_user_food_preferences(current_user)
+        if food_prefs_doc:
+            db_food_preference = food_prefs_doc.get("food_preference", "veg")
+            db_allergies = food_prefs_doc.get("allergies", [])
+            db_daily_foods = food_prefs_doc.get("daily_foods", [])
+        else:
+            db_food_preference = "veg"
+            db_allergies = []
+            db_daily_foods = []
 
         # Prepare user data for AI service
         user_data = {
@@ -47,17 +51,16 @@ async def generate_meal_plan_endpoint(
             "height": user_metrics.get("height", 170),
             "weight": user_metrics.get("weight", 70),
             "bmi": user_metrics.get("bmi", 22.5),
-            "goals": goals,
-            "weight_goal": weight_goal,
-            "calories_goal": calories_goal,
+            "goal": user_metrics.get("goal", "General Fitness"),
+            "calories_goal": user_metrics.get("calories_goal"),
             "activity_level": user_metrics.get("activity_level", "Moderately Active")
         }
 
-        # Prepare food preferences from database, falling back to request params if needed
+        # Convert preferences to dict for AI service (prioritize global db settings over request payload)
         preferences_dict = {
-            "food_preference": food_prefs_doc.get("food_preference") if food_prefs_doc else preferences.food_preference,
-            "daily_foods": food_prefs_doc.get("daily_foods", []) if food_prefs_doc else [],
-            "allergies": food_prefs_doc.get("allergies", preferences.allergies) if food_prefs_doc else preferences.allergies,
+            "food_preference": db_food_preference,
+            "allergies": db_allergies,
+            "daily_foods": db_daily_foods,
             "meals_per_day": preferences.meals_per_day
         }
 
@@ -182,7 +185,8 @@ async def delete_meal_plan(
         })
 
         if result.deleted_count == 0:
-            raise HTTPException(status_code=404, detail="Meal plan not found")
+            # We can log this but we shouldn't throw an error for idempotency.
+            logger.info(f"Meal plan {plan_id} already deleted or not found.")
 
         return {"message": "Meal plan deleted successfully"}
 
