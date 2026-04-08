@@ -145,8 +145,8 @@ Generate a UNIQUE workout plan for session {unique_seed} now:
 """
 
         # Generate response using retry logic
-        logger.info("Calling Gemini AI (gemini-3.1-flash-lite) for workout plan generation")
-        response = get_model_response('gemini-3.1-flash-lite', prompt)
+        logger.info("Calling Gemini AI (gemini-2.5-flash) for workout plan generation")
+        response = get_model_response('gemini-2.5-flash', prompt)
 
         if not response or not hasattr(response, 'text'):
             logger.error("No response from Gemini AI")
@@ -376,8 +376,8 @@ Generate unique plan for session {unique_seed}:
 """
 
         # Generate response using retry logic
-        logger.info("Calling Gemini AI (gemini-3.1-flash-lite) for meal plan generation")
-        response = get_model_response('gemini-3.1-flash-lite', prompt)
+        logger.info("Calling Gemini AI (gemini-2.5-flash) for meal plan generation")
+        response = get_model_response('gemini-2.5-flash', prompt)
 
         if not response or not response.text:
             logger.error("No response from Gemini AI")
@@ -476,8 +476,8 @@ Return ONLY valid JSON:
         ]
 
         # Generate response using retry logic
-        logger.info(f"Calling Gemini AI (gemini-3.1-flash-lite) for blood report analysis (type: {mime_type})")
-        response = get_model_response('gemini-3.1-flash-lite', parts)
+        logger.info(f"Calling Gemini AI (gemini-2.5-flash) for blood report analysis (type: {mime_type})")
+        response = get_model_response('gemini-2.5-flash', parts)
 
         if not response or not response.text:
             raise ValueError("No response from AI")
@@ -553,8 +553,8 @@ Return ONLY valid JSON:
 """
 
         # Generate response using retry logic
-        logger.info(f"Calling Gemini AI (gemini-3.1-flash-lite) for supplement suggestions for {user_data_dict.get('name', 'Unknown')}")
-        response = get_model_response('gemini-3.1-flash-lite', prompt)
+        logger.info(f"Calling Gemini AI (gemini-2.5-flash) for supplement suggestions for {user_data_dict.get('name', 'Unknown')}")
+        response = get_model_response('gemini-2.5-flash', prompt)
 
         if not response or not response.text:
             logger.error("Empty response from AI service")
