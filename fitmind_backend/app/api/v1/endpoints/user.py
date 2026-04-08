@@ -42,3 +42,13 @@ async def update_metrics(metrics: UpdateMetrics, current_user = Depends(get_curr
 async def save_food_preferences(prefs: UserFoodPreferences, current_user = Depends(get_current_user)):
     result = await save_user_food_preferences(current_user, prefs)
     return {"message": "Food preferences saved", "id": str(result)}
+from pydantic import BaseModel
+
+class PasswordResetRequest(BaseModel):
+    new_password: str
+
+@router.post("/reset-password")
+async def reset_password_endpoint(request: PasswordResetRequest, current_user = Depends(get_current_user)):
+    from app.services.auth_service import reset_password as reset_pass_service
+    await reset_pass_service(current_user, request.new_password)
+    return {"message": "Password reset successful"}

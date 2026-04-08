@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/api_constants.dart';
+import '../../../core/constants/app_colors.dart';
 import 'workout_detail_screen.dart';
 
 class WorkoutScreen extends StatefulWidget {
@@ -14,7 +15,7 @@ class WorkoutScreen extends StatefulWidget {
 }
 
 class _WorkoutScreenState extends State<WorkoutScreen> {
-  int _currentIndex = 1; // Default to workout tab
+  int _currentIndex = 1;
   List<Map<String, dynamic>> workoutPlans = [];
   bool isLoading = true;
   bool gymAccess = true;
@@ -28,351 +29,52 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   void initState() {
     super.initState();
     _loadWorkoutPlans();
+    _loadUserLevel();
+  }
+
+  Future<void> _loadUserLevel() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token == null) return;
+
+      final response = await http.get(
+        Uri.parse('${ApiConstants.baseUrl}/user/metrics'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (mounted && data['gym_level'] != null) {
+          setState(() => gymLevel = data['gym_level']);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading user level: $e');
+    }
   }
 
   Future<void> _loadWorkoutPlans() async {
     setState(() => isLoading = true);
-
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token');
-    if (token == null) {
-      setState(() => isLoading = false);
-      return;
-    }
-
-    final response = await http.get(
-      Uri.parse('${ApiConstants.baseUrl}/workout/list'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-
-    if (response.statusCode == 200) {
-      final plans = json.decode(response.body) as List;
-      setState(() {
-        workoutPlans = plans.map((plan) => plan as Map<String, dynamic>).toList();
-        isLoading = false;
-      });
-    } else {
-      setState(() => isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to load workout plans')),
-      );
-    }
-  }
-
-  void _showGenerateModal() {
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => Dialog(
-          backgroundColor: const Color(0xFF1F2937),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Container(
-            width: MediaQuery.of(context).size.width * 0.9,
-            constraints: BoxConstraints(
-              maxWidth: 380,
-              maxHeight: MediaQuery.of(context).size.height * 0.8,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Header
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.fitness_center,
-                        color: Color(0xFF3B82F6),
-                        size: 24,
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'Generate Workout Plan',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Scrollable Content
-                Flexible(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Customize your workout preferences',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Gym Access
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0F172A),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.white12),
-                          ),
-                          child: SwitchListTile(
-                            title: const Text(
-                              'Gym Access',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            subtitle: Text(
-                              gymAccess ? 'Access to gym equipment' : 'Bodyweight exercises only',
-                              style: const TextStyle(
-                                color: Colors.white60,
-                                fontSize: 13,
-                              ),
-                            ),
-                            value: gymAccess,
-                            onChanged: (value) => setState(() => gymAccess = value),
-                            activeColor: const Color(0xFF3B82F6),
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Days per Week
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0F172A),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.white12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Days per Week',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              DropdownButton<int>(
-                                value: daysPerWeek,
-                                isExpanded: true,
-                                dropdownColor: const Color(0xFF1F2937),
-                                style: const TextStyle(color: Colors.white, fontSize: 14),
-                                items: List.generate(7, (i) => DropdownMenuItem(
-                                  value: i + 1,
-                                  child: Text('${i + 1} days'),
-                                )),
-                                onChanged: (value) => setState(() => daysPerWeek = value!),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Hours per Session
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0F172A),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.white12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Hours per Session',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              TextField(
-                                decoration: const InputDecoration(
-                                  labelText: 'Duration (hours)',
-                                  labelStyle: TextStyle(color: Colors.white70, fontSize: 14),
-                                  enabledBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(color: Colors.white30),
-                                  ),
-                                  focusedBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(color: Color(0xFF3B82F6)),
-                                  ),
-                                  contentPadding: EdgeInsets.symmetric(vertical: 8),
-                                ),
-                                keyboardType: TextInputType.number,
-                                controller: TextEditingController(text: hoursPerSession.toString()),
-                                onChanged: (value) => setState(() => hoursPerSession = double.tryParse(value) ?? 1.0),
-                                style: const TextStyle(color: Colors.white, fontSize: 14),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Gym Level
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0F172A),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.white12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Experience Level',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              DropdownButton<String>(
-                                value: gymLevel,
-                                isExpanded: true,
-                                dropdownColor: const Color(0xFF1F2937),
-                                style: const TextStyle(color: Colors.white, fontSize: 14),
-                                items: ['Beginner', 'Intermediate', 'Advanced'].map((level) => DropdownMenuItem(
-                                  value: level,
-                                  child: Text(level),
-                                )).toList(),
-                                onChanged: (value) => setState(() => gymLevel = value!),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        const SizedBox(height: 20),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Buttons
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.white70,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        ),
-                        child: const Text('Cancel', style: TextStyle(fontSize: 15)),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed: _generatePlan,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF3B82F6),
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        child: const Text(
-                          'Generate',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _generatePlan() async {
-    Navigator.pop(context); // Close the modal
-
-    // Show loading dialog with proper context
-    showDialog(
-      context: context,
-      barrierDismissible: false, // Prevent accidental dismissal
-      builder: (BuildContext context) {
-        return const AlertDialog(
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Generating your workout plan...'),
-            ],
-          ),
-        );
-      },
-    );
+    if (token == null) return;
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
-      if (token == null) {
-        Navigator.pop(context); // Close loading dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Not authenticated')),
-        );
-        return;
-      }
-
-      final response = await http.post(
-        Uri.parse('${ApiConstants.baseUrl}/workout/generate'),
-        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
-        body: json.encode({
-          'gym_access': gymAccess,
-          'days_per_week': daysPerWeek,
-          'hours_per_session': hoursPerSession,
-          'gym_level': gymLevel,
-        }),
+      final response = await http.get(
+        Uri.parse('${ApiConstants.baseUrl}/workout/list'),
+        headers: {'Authorization': 'Bearer $token'},
       );
-
-      Navigator.pop(context); // Close loading dialog
 
       if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Workout plan generated!')),
-        );
-        _loadWorkoutPlans(); // Refresh the list to show new plan
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to generate plan: ${response.statusCode}')),
-        );
+        final plans = json.decode(response.body) as List;
+        setState(() {
+          workoutPlans = plans.map((plan) => plan as Map<String, dynamic>).toList();
+          isLoading = false;
+        });
       }
     } catch (e) {
-      Navigator.pop(context); // Close loading dialog
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -383,7 +85,6 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
         Navigator.pushNamedAndRemoveUntil(context, '/dashboard', (route) => false);
         break;
       case 1:
-        // Already on workout
         break;
       case 2:
         Navigator.pushNamedAndRemoveUntil(context, '/nutrition', (route) => false);
@@ -394,171 +95,79 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     }
   }
 
-  void _handleMenuSelection(String value) {
-    if (value == 'delete') {
-      setState(() {
-        isSelectionMode = true;
-        selectedPlans.clear();
-      });
-    }
-  }
-
-  void _cancelSelection() {
-    setState(() {
-      isSelectionMode = false;
-      selectedPlans.clear();
-    });
-  }
-
-  void _togglePlanSelection(String planId) {
-    setState(() {
-      if (selectedPlans.contains(planId)) {
-        selectedPlans.remove(planId);
-      } else {
-        selectedPlans.add(planId);
-      }
-    });
-  }
-
-  void _deleteSelectedPlans() async {
-    if (selectedPlans.isEmpty) return;
-
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
-    if (token == null) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return const AlertDialog(
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Deleting selected workout plans...'),
-            ],
-          ),
-        );
-      },
-    );
-
-    try {
-      for (String planId in selectedPlans) {
-        final response = await http.delete(
-          Uri.parse('${ApiConstants.baseUrl}/workout/$planId'),
-          headers: {'Authorization': 'Bearer $token'},
-        );
-        if (response.statusCode != 200) {
-          throw Exception('Failed to delete plan $planId');
-        }
-      }
-
-      Navigator.pop(context); // Close loading dialog
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${selectedPlans.length} workout plan(s) deleted')),
-      );
-
-      setState(() {
-        isSelectionMode = false;
-        selectedPlans.clear();
-      });
-
-      _loadWorkoutPlans(); // Refresh the list
-    } catch (e) {
-      Navigator.pop(context); // Close loading dialog
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error deleting plans: $e')),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: isSelectionMode
-            ? const Text(
-                'Select Workouts to Delete',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              )
-            : const Text(
-                'My Workout Plans',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-        actions: isSelectionMode
-            ? [
-                TextButton(
-                  onPressed: _cancelSelection,
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: selectedPlans.isEmpty ? null : _deleteSelectedPlans,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFDC2626),
-                    disabledBackgroundColor: Colors.grey,
-                  ),
-                  child: Text(
-                    'Delete (${selectedPlans.length})',
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                ),
-                const SizedBox(width: 16),
-              ]
-            : [
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, color: Colors.white),
-                  onSelected: _handleMenuSelection,
-                  itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                    const PopupMenuItem<String>(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete, color: Colors.red),
-                          SizedBox(width: 8),
-                          Text('Delete Workouts'),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-      ),
+      backgroundColor: AppColors.background,
       body: Column(
         children: [
           Expanded(
             child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : workoutPlans.isEmpty
-                    ? _buildEmptyView()
-                    : _buildPlansListView(),
+                ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                : _buildBody(),
           ),
           BottomNavBar(currentIndex: _currentIndex, onTap: _onNavTap),
         ],
       ),
-      floatingActionButton: Container(
-        margin: const EdgeInsets.only(bottom: 80),
-        child: FloatingActionButton(
-          onPressed: _showGenerateModal,
-          backgroundColor: const Color(0xFF3B82F6),
-          child: const Icon(Icons.add),
-        ),
+      floatingActionButton: isSelectionMode ? null : _buildFAB(),
+    );
+  }
+
+  Widget _buildBody() {
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildHeader(),
+          Expanded(
+            child: workoutPlans.isEmpty 
+                ? _buildEmptyView() 
+                : _buildPlansList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                isSelectionMode ? 'Select Items' : 'Performance',
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: -0.5),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                isSelectionMode ? '${selectedPlans.length} chosen' : 'Your elite training plans',
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+              ),
+            ],
+          ),
+          if (isSelectionMode)
+            Row(
+              children: [
+                TextButton(
+                  onPressed: () => setState(() => isSelectionMode = false),
+                  child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
+                ),
+                IconButton(
+                  onPressed: selectedPlans.isEmpty ? null : _deleteSelectedPlans,
+                  icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
+                ),
+              ],
+            )
+          else
+            IconButton(
+              onPressed: () => setState(() => isSelectionMode = true),
+              icon: const Icon(Icons.edit_note_rounded, color: AppColors.textSecondary),
+            ),
+        ],
       ),
     );
   }
@@ -568,96 +177,283 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
-            Icons.fitness_center,
-            color: Colors.white70,
-            size: 80,
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'No workout plans yet.',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
+          Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: AppColors.secondaryCard,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.primaryWithOpacity(0.1), width: 8),
             ),
+            child: const Icon(Icons.fitness_center_rounded, color: AppColors.textPrimary, size: 64),
           ),
+          const SizedBox(height: 32),
+          const Text('No Active Training', style: TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          const Text(
-            'Create your first workout plan.',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 16,
-            ),
-          ),
+          const Text('Tap "+" to generate your elite plan', style: TextStyle(color: AppColors.textDim, fontSize: 14)),
         ],
       ),
     );
   }
 
-  Widget _buildPlansListView() {
+  Widget _buildPlansList() {
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       itemCount: workoutPlans.length,
       itemBuilder: (context, index) {
         final plan = workoutPlans[index];
-        final isSelected = selectedPlans.contains(plan['id']);
+        final id = plan['id'].toString();
+        final isSelected = selectedPlans.contains(id);
 
-        return Card(
-          margin: const EdgeInsets.only(bottom: 16),
-          color: isSelected ? const Color(0xFF1F2937).withOpacity(0.8) : const Color(0xFF1F2937),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: isSelected ? const BorderSide(color: Color(0xFF3B82F6), width: 2) : BorderSide.none,
-          ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.all(20),
-            leading: isSelectionMode
-                ? Checkbox(
-                    value: isSelected,
-                    onChanged: (bool? value) => _togglePlanSelection(plan['id']),
-                    activeColor: const Color(0xFF3B82F6),
-                  )
-                : null,
-            title: Text(
-              plan['name'],
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                decoration: isSelected ? TextDecoration.lineThrough : null,
-                decorationColor: Colors.white54,
+        return GestureDetector(
+          onTap: () {
+            if (isSelectionMode) {
+              setState(() => isSelected ? selectedPlans.remove(id) : selectedPlans.add(id));
+            } else {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => WorkoutDetailScreen(planId: id, planName: plan['name'])),
+              );
+            }
+          },
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.cardBackground,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: isSelected ? AppColors.primary : AppColors.textPrimary.withOpacity(0.05),
+                width: 1.5,
               ),
             ),
-            trailing: isSelectionMode
-                ? null
-                : const Icon(
-                    Icons.chevron_right,
-                    color: Colors.white70,
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryWithOpacity(0.1),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-            onTap: isSelectionMode
-                ? () => _togglePlanSelection(plan['id'])
-                : () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => WorkoutDetailScreen(
-                        planId: plan['id'],
-                        planName: plan['name'],
-                      ),
-                    ),
+                  child: Icon(
+                    isSelectionMode ? (isSelected ? Icons.check_circle_rounded : Icons.circle_outlined) : Icons.bolt_rounded,
+                    color: AppColors.textPrimary,
+                    size: 24,
                   ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(plan['name'], style: const TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      Text('Intensity: High • Daily Session', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textDim, size: 16),
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  String _formatDate(String dateString) {
+  Widget _buildFAB() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 80),
+      child: FloatingActionButton(
+        onPressed: _showGenerateModal,
+        backgroundColor: AppColors.primary,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: const Icon(Icons.auto_awesome_rounded, color: AppColors.textPrimary, size: 28),
+      ),
+    );
+  }
+
+  void _showGenerateModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => Container(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          decoration: const BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.textDim, borderRadius: BorderRadius.circular(2))),
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Athlete Calibration', style: TextStyle(color: AppColors.textPrimary, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
+                    const SizedBox(height: 8),
+                    const Text('Configure your AI performance parameters', style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+                    const SizedBox(height: 32),
+                    
+                    _buildLabel('EQUIPMENT PROTOCOL'),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(color: AppColors.secondaryCard, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.textPrimary.withOpacity(0.05))),
+                      child: SwitchListTile(
+                        title: Text(gymAccess ? 'Full Gym Access' : 'Bodyweight Only', style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.bold)),
+                        subtitle: Text(gymAccess ? 'Barbells, dumbbells & machines' : 'No specialized equipment needed', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                        value: gymAccess,
+                        onChanged: (v) => setState(() => gymAccess = v),
+                        activeColor: AppColors.primary,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 24),
+                    _buildLabel('EXPERIENCE TIER'),
+                    Row(
+                      children: ['Beginner', 'Intermediate', 'Advanced'].map((level) {
+                        bool isSelected = gymLevel == level;
+                        return Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => gymLevel = level),
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 4),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: isSelected ? AppColors.primaryWithOpacity(0.12) : AppColors.secondaryCard,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: isSelected ? AppColors.primary : AppColors.textPrimary.withOpacity(0.05), width: 1.5),
+                              ),
+                              child: Text(
+                                level,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: isSelected ? AppColors.textPrimary : AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    
+                    const SizedBox(height: 32),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _buildLabel('SESSION FREQUENCY'),
+                        Text('${daysPerWeek}d / week', style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    _buildCustomSlider(
+                      value: daysPerWeek.toDouble(),
+                      min: 1, max: 7, divisions: 6,
+                      onChanged: (v) => setState(() => daysPerWeek = v.round()),
+                    ),
+                    
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _buildLabel('TEMPORAL DURATION'),
+                        Text('${hoursPerSession.toStringAsFixed(1)}h / session', style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    _buildCustomSlider(
+                      value: hoursPerSession,
+                      min: 0.5, max: 3.0, divisions: 5,
+                      onChanged: (v) => setState(() => hoursPerSession = v),
+                    ),
+                    
+                    const SizedBox(height: 48),
+                    _buildGenerateButton(),
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLabel(String l) => Padding(padding: const EdgeInsets.only(bottom: 12, left: 4), child: Text(l, style: const TextStyle(color: AppColors.textSecondary, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)));
+
+  Widget _buildCustomSlider({required double value, required double min, required double max, required int divisions, required Function(double) onChanged}) {
+    return SliderTheme(
+      data: SliderTheme.of(context).copyWith(
+        activeTrackColor: AppColors.primary,
+        inactiveTrackColor: AppColors.textPrimary.withOpacity(0.08),
+        thumbColor: Colors.white,
+        overlayColor: AppColors.primaryWithOpacity(0.15),
+        trackHeight: 6,
+        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10, elevation: 6),
+      ),
+      child: Slider(value: value, min: min, max: max, divisions: divisions, onChanged: onChanged),
+    );
+  }
+
+  Widget _buildGenerateButton() {
+    return Container(
+      width: double.infinity,
+      height: 64,
+      decoration: BoxDecoration(
+        boxShadow: [BoxShadow(color: AppColors.primaryWithOpacity(0.3), blurRadius: 24, offset: const Offset(0, 8))],
+      ),
+      child: ElevatedButton(
+        onPressed: _generatePlan,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          elevation: 0,
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.auto_awesome_rounded, color: AppColors.textPrimary, size: 20),
+            SizedBox(width: 12),
+            Text('INITIATE GENERATION', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _generatePlan() async {
+    if (Navigator.canPop(context)) Navigator.pop(context); // Dismiss bottom sheet
+    showDialog(context: context, barrierDismissible: false, builder: (context) => const Center(child: CircularProgressIndicator()));
     try {
-      final date = DateTime.parse(dateString);
-      return '${date.day}/${date.month}/${date.year}';
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      await http.post(
+        Uri.parse('${ApiConstants.baseUrl}/workout/generate'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: json.encode({'gym_access': gymAccess, 'days_per_week': daysPerWeek, 'hours_per_session': hoursPerSession, 'gym_level': gymLevel}),
+      );
+      if (mounted && Navigator.canPop(context)) Navigator.pop(context); // Dismiss loader
+      _loadWorkoutPlans();
     } catch (e) {
-      return dateString;
+      if (mounted && Navigator.canPop(context)) Navigator.pop(context); // Dismiss loader
+    }
+  }
+
+  void _deleteSelectedPlans() async {
+    showDialog(context: context, barrierDismissible: false, builder: (context) => const Center(child: CircularProgressIndicator()));
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      for (var id in selectedPlans) {
+        await http.delete(Uri.parse('${ApiConstants.baseUrl}/workout/$id'), headers: {'Authorization': 'Bearer $token'});
+      }
+      if (mounted && Navigator.canPop(context)) Navigator.pop(context); // Dismiss loader
+      setState(() { isSelectionMode = false; selectedPlans.clear(); });
+      _loadWorkoutPlans();
+    } catch (e) {
+      if (mounted && Navigator.canPop(context)) Navigator.pop(context); // Dismiss loader
     }
   }
 }

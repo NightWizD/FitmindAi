@@ -19,11 +19,13 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         username = verify_token(token, credentials_exception)
         logger.info(f"Decoded username: {username}")
         user = await get_user(username)
-        logger.info(f"Retrieved user: {user}")
         if user is None:
-            logger.error(f"User not found for username: {username}")
+            logger.error(f"User not found for username in database: {username}")
             raise credentials_exception
         return user
+    except HTTPException as e:
+        # Re-raise HTTPExceptions as-is
+        raise e
     except Exception as e:
-        logger.error(f"Error in get_current_user: {e}")
+        logger.error(f"Unexpected error in get_current_user: {str(e)}", exc_info=True)
         raise credentials_exception

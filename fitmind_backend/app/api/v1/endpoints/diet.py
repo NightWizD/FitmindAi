@@ -99,6 +99,144 @@ async def generate_meal_plan_endpoint(
         logger.error(f"Error generating meal plan: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to generate meal plan")
 
+@router.get("/supplements", response_model=dict)
+async def get_supplements_endpoint(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get personalized supplement suggestions using AI with state-aware caching.
+    """
+    try:
+        # Get current user parameters
+        user_metrics = await get_user_metrics(current_user)
+        if not user_metrics:
+            raise HTTPException(status_code=400, detail="User metrics not found. Please complete your profile.")
+        
+        current_goals = user_metrics.get("goals", [user_metrics.get("goal")])
+        current_level = user_metrics.get("gym_level", "Beginner")
+
+        # Check for cached stack
+        cached_stack = await db.user_supplements.find_one({"user_id": current_user.username})
+        
+        if cached_stack:
+            # Stale Check: Only re-generate if goals or gym_level has changed
+            cached_goals = cached_stack.get("cached_goals", [])
+            cached_level = cached_stack.get("cached_level", "Beginner")
+            
+            if set(current_goals) == set(cached_goals) and current_level == cached_level:
+                logger.info(f"Serving cached supplement stack for {current_user.username}")
+                return cached_stack.get("data")
+
+        # If not cached or stale, generate new stack
+        logger.info(f"Generating NEW supplement stack for {current_user.username}")
+        from app.services.gemini_service import generate_supplements
+        supplements = await generate_supplements(user_metrics)
+        
+        # Save to database
+        new_stack = {
+            "user_id": current_user.username,
+            "data": supplements,
+            "cached_goals": current_goals,
+            "cached_level": current_level,
+            "updated_at": datetime.utcnow()
+        }
+        
+        await db.user_supplements.update_one(
+            {"user_id": current_user.username},
+            {"$set": new_stack},
+            upsert=True
+        )
+        
+        return supplements
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error managing supplement suggestions: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to manage supplement suggestions")
+
+from fastapi import UploadFile, File
+import base64
+
+@router.post("/analyze-report", response_model=dict)
+async def analyze_report_endpoint(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Analyze blood report and suggest supplements.
+    """
+    try:
+        # Get user metrics
+        user_metrics = await get_user_metrics(current_user)
+        if not user_metrics:
+            raise HTTPException(status_code=400, detail="User metrics not found.")
+        
+        # Read file data
+        contents = await file.read()
+        file_b64 = base64.b64encode(contents).decode('utf-8')
+        
+        # Analyze using Gemini
+        from app.services.gemini_service import analyze_blood_report
+        result = await analyze_blood_report(file_b64, file.content_type, user_metrics)
+        
+        # Archive the report analysis in the database
+        db = get_database()
+        report_doc = {
+            "user_id": current_user.username,
+            "analysis": result,
+            "created_at": datetime.utcnow(),
+            "file_type": file.content_type
+        }
+        await db.user_blood_reports.insert_one(report_doc)
+        logger.info(f"Archived clinical report analysis for {current_user.username}")
+        
+        # Also sync these clinical recommendations into the active supplement stack
+        if result.get("recommendations"):
+            # Map report recommendations to standard supplement format
+            clinical_supplements = []
+            for rec in result["recommendations"]:
+                clinical_supplements.append({
+                    "name": rec.get("name"),
+                    "dosage": rec.get("dosage"),
+                    "timing": rec.get("timing"),
+                    "benefit": rec.get("reason"),
+                    "description": f"Clinical recommendation based on: {result.get('report_summary', 'Blood Analysis')}"
+                })
+            
+            # Fetch existing stack or create new one
+            existing_stack = await db.user_supplements.find_one({"user_id": current_user.username})
+            
+            if existing_stack:
+                current_data = existing_stack.get("data", {"supplements": [], "report_supplements": []})
+                current_data["report_supplements"] = clinical_supplements
+            else:
+                current_data = {
+                    "supplements": [],
+                    "report_supplements": clinical_supplements,
+                    "safety_disclaimer": "Clinical recommendations based on blood report analysis."
+                }
+
+            await db.user_supplements.update_one(
+                {"user_id": current_user.username},
+                {"$set": {
+                    "data": current_data,
+                    "cached_goals": user_metrics.get("goals", [user_metrics.get("goal")]),
+                    "cached_level": user_metrics.get("gym_level", "Beginner"),
+                    "updated_at": datetime.utcnow(),
+                    "has_clinical_data": True
+                }},
+                upsert=True
+            )
+            logger.info(f"Synced {len(clinical_supplements)} clinical recommendations to active supplement stack.")
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Error analyzing blood report: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to analyze report")
+
 @router.get("/list", response_model=list)
 async def get_meal_plans(
     db: AsyncIOMotorDatabase = Depends(get_database),
@@ -195,3 +333,4 @@ async def delete_meal_plan(
     except Exception as e:
         logger.error(f"Error deleting meal plan: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to delete meal plan")
+

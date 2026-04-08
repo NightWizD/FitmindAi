@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/api_constants.dart';
+import '../../../core/constants/app_colors.dart';
 
 class FoodPreferenceScreen extends StatefulWidget {
   const FoodPreferenceScreen({super.key});
@@ -12,197 +13,163 @@ class FoodPreferenceScreen extends StatefulWidget {
 }
 
 class _FoodPreferenceScreenState extends State<FoodPreferenceScreen> {
-  List<String> _selectedPreferences = [];
+  String _selectedPreference = 'veg';
   final TextEditingController _allergyController = TextEditingController();
+  bool _isLoading = false;
 
-  final List<String> preferences = ['Vegetarian', 'Non-Vegetarian', 'Vegan', 'Eggitarian'];
+  final Map<String, IconData> prefOptions = {
+    'Veg': Icons.spa_rounded,
+    'Non-Veg': Icons.restaurant_menu_rounded,
+    'Vegan': Icons.eco_rounded,
+    'Eggitarian': Icons.egg_rounded,
+  };
 
   void _selectPreference(String pref) {
-    setState(() {
-      if (_selectedPreferences.contains(pref)) {
-        _selectedPreferences.remove(pref);
-      } else {
-        _selectedPreferences.add(pref);
-      }
-    });
+    setState(() => _selectedPreference = pref.toLowerCase());
   }
 
   void _continue() async {
-    if (_selectedPreferences.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select at least one preference')),
+    setState(() => _isLoading = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      final response = await http.post(
+        Uri.parse('${ApiConstants.baseUrl}/user/food-preferences'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: json.encode({
+          'food_preference': _selectedPreference,
+          'allergies': _allergyController.text.isNotEmpty ? _allergyController.text.split(',').map((e) => e.trim()).toList() : [],
+        }),
       );
-      return;
+
+      if (response.statusCode == 200) {
+        Navigator.pushNamedAndRemoveUntil(context, '/dashboard', (route) => false);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Connection error')));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
-    if (token == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Not authenticated')),
-      );
-      return;
-    }
-
-    final response = await http.post(
-      Uri.parse('${ApiConstants.baseUrl}/user/food-preferences'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: json.encode({
-        'preferences': _selectedPreferences,
-        'allergy': _allergyController.text,
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Food preferences saved successfully')),
-      );
-      // Navigate to home or dashboard
-      Navigator.pushNamedAndRemoveUntil(context, '/dashboard', (route) => false);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to save preferences')),
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    _allergyController.dispose();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
-            // Step indicator
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(4, (index) => Container(
-                  width: 40,
-                  height: 40,
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFF3B82F6),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '${index + 1}',
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ),
-                )),
-              ),
-            ),
+            _buildProgress(3),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Select Your Food Preferences',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    ...preferences.map((pref) => GestureDetector(
-                      onTap: () => _selectPreference(pref),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1F2937),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: _selectedPreferences.contains(pref) ? const Color(0xFF3B82F6) : Colors.transparent,
-                            width: 2,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              _selectedPreferences.contains(pref) ? Icons.check_circle : Icons.radio_button_unchecked,
-                              color: _selectedPreferences.contains(pref) ? const Color(0xFF3B82F6) : Colors.grey,
-                            ),
-                            const SizedBox(width: 16),
-                            Text(
-                              pref,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )),
-                    const SizedBox(height: 24),
-                    TextFormField(
-                      controller: _allergyController,
-                      decoration: InputDecoration(
-                        labelText: 'Allergies (optional)',
-                        labelStyle: const TextStyle(color: Colors.white),
-                        filled: true,
-                        fillColor: const Color(0xFF374151),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      style: const TextStyle(color: Colors.white),
-                    ),
+                    const SizedBox(height: 40),
+                    _buildHeader('Fuel Protocol', 'Select your dietary alignment'),
+                    const SizedBox(height: 32),
+                    ...prefOptions.keys.map((p) => _buildPrefCard(p, prefOptions[p]!)),
+                    const SizedBox(height: 32),
+                    _buildFieldLabel('KNOWN ALLERGIES (OPTIONAL)'),
+                    _buildTextField(),
+                    const SizedBox(height: 40),
                   ],
                 ),
               ),
             ),
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: Container(
-                width: double.infinity,
-                height: 50,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ),
-                ),
-                child: ElevatedButton(
-                  onPressed: _continue,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text(
-                    'Continue',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            _buildNextButton(),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProgress(int step) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+      child: Row(
+        children: List.generate(4, (index) => Expanded(
+          child: Container(
+            height: 4, margin: const EdgeInsets.symmetric(horizontal: 2),
+            decoration: BoxDecoration(
+              color: index <= step ? AppColors.primary : AppColors.textPrimary.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(2),
+              boxShadow: index <= step ? [BoxShadow(color: AppColors.primaryWithOpacity(0.3), blurRadius: 8)] : null,
+            ),
+          ),
+        )),
+      ),
+    );
+  }
+
+  Widget _buildHeader(String title, String sub) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(color: AppColors.textPrimary, fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
+        const SizedBox(height: 8),
+        Text(sub, style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+      ],
+    );
+  }
+
+  Widget _buildFieldLabel(String label) => Padding(padding: const EdgeInsets.only(bottom: 12, left: 4), child: Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)));
+
+  Widget _buildPrefCard(String name, IconData icon) {
+    bool isSelected = _selectedPreference == name.toLowerCase();
+    return GestureDetector(
+      onTap: () => _selectPreference(name),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primaryWithOpacity(0.1) : AppColors.cardBackground,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: isSelected ? AppColors.primary : AppColors.textPrimary.withOpacity(0.05), width: 1.5),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: (isSelected ? AppColors.primary : AppColors.textPrimary).withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
+              child: Icon(icon, color: isSelected ? AppColors.primary : AppColors.textDim, size: 24),
+            ),
+            const SizedBox(width: 20),
+            Expanded(child: Text(name, style: TextStyle(color: isSelected ? AppColors.textPrimary : AppColors.textSecondary, fontSize: 16, fontWeight: FontWeight.bold))),
+            if (isSelected) const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField() {
+    return Container(
+      decoration: BoxDecoration(color: AppColors.cardBackground, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.textPrimary.withOpacity(0.05))),
+      child: TextFormField(
+        controller: _allergyController, style: const TextStyle(color: AppColors.textPrimary),
+        decoration: InputDecoration(
+          prefixIcon: Icon(Icons.warning_amber_rounded, color: AppColors.primary, size: 18),
+          hintText: 'e.g. Peanuts, Shellfish', hintStyle: TextStyle(color: AppColors.textDim, fontSize: 14),
+          border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNextButton() {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: SizedBox(
+        width: double.infinity, height: 64,
+        child: ElevatedButton(
+          onPressed: _isLoading ? null : _continue,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            elevation: 8, shadowColor: AppColors.primaryWithOpacity(0.4),
+          ),
+          child: _isLoading ? const CircularProgressIndicator(color: AppColors.textPrimary) : const Text('Complete Calibration', style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
         ),
       ),
     );

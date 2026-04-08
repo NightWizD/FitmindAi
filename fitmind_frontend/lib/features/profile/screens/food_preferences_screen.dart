@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/api_constants.dart';
+import '../../../core/constants/app_colors.dart';
 
 class FoodPreferencesScreen extends StatefulWidget {
   const FoodPreferencesScreen({super.key});
@@ -20,7 +21,12 @@ class _FoodPreferencesScreenState extends State<FoodPreferencesScreen> {
   final TextEditingController _foodController = TextEditingController();
   final TextEditingController _allergyController = TextEditingController();
 
-  final List<String> _preferenceOptions = ['veg', 'non-veg', 'vegan', 'eggitarian'];
+  final Map<String, IconData> _preferenceOptions = {
+    'veg': Icons.eco_rounded,
+    'non-veg': Icons.set_meal_rounded,
+    'vegan': Icons.spa_rounded,
+    'eggitarian': Icons.egg_rounded,
+  };
 
   @override
   void initState() {
@@ -43,9 +49,7 @@ class _FoodPreferencesScreenState extends State<FoodPreferencesScreen> {
 
       final response = await http.get(
         Uri.parse('${ApiConstants.baseUrl}/user/metrics'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       if (response.statusCode == 200) {
@@ -53,21 +57,16 @@ class _FoodPreferencesScreenState extends State<FoodPreferencesScreen> {
         setState(() {
           _foodPreference = data['food_preference'] ?? 'veg';
           _dailyFoods.clear();
-          if (data['daily_foods'] != null) {
-            _dailyFoods.addAll(List<String>.from(data['daily_foods']));
-          }
+          if (data['daily_foods'] != null) _dailyFoods.addAll(List<String>.from(data['daily_foods']));
           _allergies.clear();
-          if (data['allergies'] != null) {
-            _allergies.addAll(List<String>.from(data['allergies']));
-          }
+          if (data['allergies'] != null) _allergies.addAll(List<String>.from(data['allergies']));
           _isLoading = false;
         });
       } else {
         setState(() => _isLoading = false);
       }
     } catch (e) {
-      setState(() => _isLoading = false);
-      print('Error loading preferences: $e');
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -76,127 +75,73 @@ class _FoodPreferencesScreenState extends State<FoodPreferencesScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
-
       final response = await http.post(
         Uri.parse('${ApiConstants.baseUrl}/user/food-preferences'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
         body: json.encode({
           'food_preference': _foodPreference,
           'daily_foods': _dailyFoods,
           'allergies': _allergies,
         }),
       );
-
-        if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Preferences updated successfully')),
-        );
-        // Removed Navigator.pop(context); to stay on the same screen
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to update preferences')),
-        );
+      if (response.statusCode == 200) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Preferences updated')));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   void _addItem(TextEditingController controller, List<String> list) {
     final text = controller.text.trim();
     if (text.isNotEmpty && !list.contains(text)) {
-      setState(() {
-        list.add(text);
-        controller.clear();
-      });
+      setState(() { list.add(text); controller.clear(); });
     }
   }
 
-  void _removeItem(String item, List<String> list) {
-    setState(() {
-      list.remove(item);
-    });
-  }
+  void _removeItem(String item, List<String> list) => setState(() => list.remove(item));
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: const Text(
-          'Food Preferences',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+      backgroundColor: AppColors.background,
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF3B82F6)))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          : SafeArea(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Dietary Type',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    children: _preferenceOptions.map((opt) {
-                      final isSelected = _foodPreference == opt;
-                      return ChoiceChip(
-                        label: Text(opt.toUpperCase()),
-                        selected: isSelected,
-                        onSelected: (val) => setState(() => _foodPreference = opt),
-                        selectedColor: const Color(0xFF3B82F6),
-                        backgroundColor: const Color(0xFF1F2937),
-                        labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.white70),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 24),
-                  _buildInputSection(
-                    title: 'Daily Food Items',
-                    hint: 'Add food you eat normally (e.g. Rice, Dal)',
-                    controller: _foodController,
-                    items: _dailyFoods,
-                    icon: Icons.restaurant,
-                  ),
-                  const SizedBox(height: 24),
-                  _buildInputSection(
-                    title: 'Allergies',
-                    hint: 'Add items you are allergic to',
-                    controller: _allergyController,
-                    items: _allergies,
-                    icon: Icons.warning_amber_rounded,
-                    color: Colors.redAccent,
-                  ),
-                  const SizedBox(height: 40),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      onPressed: _updatePreferences,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF3B82F6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                      child: const Text(
-                        'Save Preferences',
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  _buildAppBar(),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 24),
+                          _buildFieldLabel('DIETARY PROTOCOL'),
+                          _buildDietGrid(),
+                          const SizedBox(height: 32),
+                          _buildFieldLabel('DAILY INTAKE'),
+                          _buildTagInput(
+                            controller: _foodController,
+                            hint: 'e.g. Rice, Dal, Oats...',
+                            items: _dailyFoods,
+                            accentColor: AppColors.primary,
+                          ),
+                          const SizedBox(height: 32),
+                          _buildFieldLabel('ALLERGEN FLAGS'),
+                          _buildTagInput(
+                            controller: _allergyController,
+                            hint: 'e.g. Peanuts, Gluten...',
+                            items: _allergies,
+                            accentColor: AppColors.error,
+                          ),
+                          const SizedBox(height: 48),
+                          _buildSaveButton(),
+                          const SizedBox(height: 40),
+                        ],
                       ),
                     ),
                   ),
@@ -206,56 +151,147 @@ class _FoodPreferencesScreenState extends State<FoodPreferencesScreen> {
     );
   }
 
-  Widget _buildInputSection({
-    required String title,
-    required String hint,
+  Widget _buildAppBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 16, 24, 8),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () => Navigator.canPop(context) ? Navigator.pop(context) : Navigator.pushReplacementNamed(context, '/profile'),
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.textPrimary, size: 20),
+          ),
+          const Text('Fuel Protocol', style: TextStyle(color: AppColors.textPrimary, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFieldLabel(String label) => Padding(
+    padding: const EdgeInsets.only(bottom: 12, left: 4),
+    child: Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+  );
+
+  Widget _buildDietGrid() {
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+      childAspectRatio: 2.4,
+      children: _preferenceOptions.entries.map((entry) {
+        final isSelected = _foodPreference == entry.key;
+        return GestureDetector(
+          onTap: () => setState(() => _foodPreference = entry.key),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            decoration: BoxDecoration(
+              color: isSelected ? AppColors.primaryWithOpacity(0.12) : AppColors.cardBackground,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: isSelected ? AppColors.primary : AppColors.textPrimary.withOpacity(0.05), width: 1.5),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(entry.value, color: isSelected ? AppColors.primary : AppColors.textDim, size: 18),
+                const SizedBox(width: 8),
+                Text(entry.key.toUpperCase(), style: TextStyle(color: isSelected ? AppColors.textPrimary : AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildTagInput({
     required TextEditingController controller,
+    required String hint,
     required List<String> items,
-    required IconData icon,
-    Color color = const Color(0xFF3B82F6),
+    required Color accentColor,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: controller,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: hint,
-                  hintStyle: const TextStyle(color: Colors.white24),
-                  filled: true,
-                  fillColor: const Color(0xFF1F2937),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.cardBackground,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.textPrimary.withOpacity(0.05)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: hint,
+                    hintStyle: TextStyle(color: AppColors.textDim, fontSize: 14),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  ),
+                  onSubmitted: (_) => _addItem(controller, items),
                 ),
-                onSubmitted: (_) => _addItem(controller, items),
               ),
-            ),
-            const SizedBox(width: 8),
-            IconButton.filled(
-              onPressed: () => _addItem(controller, items),
-              icon: const Icon(Icons.add),
-              style: IconButton.styleFrom(backgroundColor: color),
-            ),
-          ],
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: GestureDetector(
+                  onTap: () => _addItem(controller, items),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: accentColor.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+                    child: Icon(Icons.add_rounded, color: accentColor, size: 18),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: items.map((item) => Chip(
-            label: Text(item, style: const TextStyle(color: Colors.white)),
-            backgroundColor: const Color(0xFF374151),
-            deleteIcon: const Icon(Icons.close, size: 18, color: Colors.white70),
-            onDeleted: () => _removeItem(item, items),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          )).toList(),
-        ),
+        if (items.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: items.map((item) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: accentColor.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: accentColor.withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(item, style: TextStyle(color: accentColor, fontSize: 13, fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    onTap: () => _removeItem(item, items),
+                    child: Icon(Icons.close_rounded, size: 14, color: accentColor.withOpacity(0.7)),
+                  ),
+                ],
+              ),
+            )).toList(),
+          ),
+        ],
       ],
+    );
+  }
+
+  Widget _buildSaveButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 60,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _updatePreferences,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          elevation: 8,
+          shadowColor: AppColors.primaryWithOpacity(0.4),
+        ),
+        child: Text('Sync Fuel Protocol', style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+      ),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/api_constants.dart';
+import '../../../core/constants/app_colors.dart';
 
 class PersonalInfoScreen extends StatefulWidget {
   const PersonalInfoScreen({super.key});
@@ -29,9 +30,7 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
 
       final response = await http.get(
         Uri.parse('${ApiConstants.baseUrl}/user/metrics'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       if (response.statusCode == 200) {
@@ -39,74 +38,56 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
           _userData = json.decode(response.body);
           _isLoading = false;
         });
-      } else {
-        setState(() => _isLoading = false);
       }
     } catch (e) {
-      setState(() => _isLoading = false);
-      print('Error fetching personal info: $e');
+      if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  String _calculateBMI() {
-    if (_userData['weight'] != null && _userData['height'] != null) {
-      double weight = _userData['weight'].toDouble();
-      double height = _userData['height'].toDouble() / 100;
-      if (height > 0) {
-        return (weight / (height * height)).toStringAsFixed(1);
-      }
-    }
-    return 'N/A';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: const Text(
-          'Personal Information',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+      backgroundColor: AppColors.background,
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF3B82F6)))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          : SafeArea(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSectionHeader('Basic Metrics'),
-                  _buildInfoCard([
-                    _buildInfoRow('Age', '${_userData['age'] ?? 'N/A'} years'),
-                    _buildInfoRow('Gender', _userData['gender'] ?? 'N/A'),
-                    _buildInfoRow('Height', '${_userData['height'] ?? 'N/A'} cm'),
-                    _buildInfoRow('Weight', '${_userData['weight'] ?? 'N/A'} kg'),
-                    _buildInfoRow('BMI', _userData['bmi'] != null ? _userData['bmi'].toStringAsFixed(1) : _calculateBMI()),
-                  ]),
-                  const SizedBox(height: 24),
-                  _buildSectionHeader('Fitness Profile'),
-                  _buildInfoCard([
-                    _buildInfoRow('Current Goal', _userData['goal'] ?? 'N/A'),
-                    _buildInfoRow('Activity Level', _userData['activity_level'] ?? 'N/A'),
-                  ]),
-                  const SizedBox(height: 24),
-                  _buildSectionHeader('Target Goals'),
-                  _buildInfoCard([
-                    _buildInfoRow('Weight Goal', '${_userData['weight_goal'] ?? 'N/A'} kg'),
-                    _buildInfoRow('Calories Goal', '${_userData['calories_goal'] ?? 'N/A'} kcal'),
-                  ]),
-                  const SizedBox(height: 32),
-                  Center(
-                    child: Text(
-                      'Account linked to ${_userData['name'] ?? 'User'}',
-                      style: const TextStyle(color: Colors.white38, fontSize: 12),
+                   _buildAppBar(),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 24),
+                          _buildFieldLabel('BIOMETRIC TELEMETRY'),
+                          _buildInfoModule([
+                            _buildInfoRow('Age', '${_userData['age'] ?? '--'} yrs'),
+                            _buildInfoRow('Gender', (_userData['gender'] ?? '--').toString().toUpperCase()),
+                            _buildInfoRow('Height', '${_userData['height'] ?? '--'} cm'),
+                            _buildInfoRow('Weight', '${_userData['weight'] ?? '--'} kg'),
+                            _buildInfoRow('BMI Index', _userData['bmi']?.toStringAsFixed(1) ?? '--'),
+                          ]),
+                          const SizedBox(height: 32),
+                          _buildFieldLabel('PERFORMANCE PROFILE'),
+                          _buildInfoModule([
+                            _buildInfoRow('Activity Tier', _userData['activity_level'] ?? '--'),
+                            _buildInfoRow('Target Goal', '${_userData['weight_goal'] ?? '--'} kg'),
+                            _buildInfoRow('Ceiling', '${_userData['calories_goal'] ?? '--'} kcal'),
+                          ]),
+                          const SizedBox(height: 48),
+                          Center(
+                            child: Column(
+                              children: [
+                                Text('ID: ${_userData['id'] ?? '---'}', style: TextStyle(color: AppColors.textPrimary.withOpacity(0.05), fontSize: 10, letterSpacing: 2)),
+                                const SizedBox(height: 16),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 40),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -115,50 +96,40 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title) {
+  Widget _buildAppBar() {
     return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 12),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-        ),
+      padding: const EdgeInsets.fromLTRB(8, 16, 24, 8),
+      child: Row(
+        children: [
+          IconButton(onPressed: () => Navigator.canPop(context) ? Navigator.pop(context) : Navigator.pushReplacementNamed(context, '/profile'), icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.textPrimary, size: 20)),
+          const Text('Identity Summary', style: TextStyle(color: AppColors.textPrimary, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
+        ],
       ),
     );
   }
 
-  Widget _buildInfoCard(List<Widget> children) {
+  Widget _buildFieldLabel(String label) => Padding(padding: const EdgeInsets.only(bottom: 12, left: 4), child: Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)));
+
+  Widget _buildInfoModule(List<Widget> rows) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1F2937),
-        borderRadius: BorderRadius.circular(16),
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: AppColors.textPrimary.withOpacity(0.05)),
       ),
-      child: Column(
-        children: children,
-      ),
+      child: Column(children: rows),
     );
   }
 
   Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.textPrimary.withOpacity(0.03)))),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white70, fontSize: 16),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 15)),
+          Text(value, style: const TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
         ],
       ),
     );

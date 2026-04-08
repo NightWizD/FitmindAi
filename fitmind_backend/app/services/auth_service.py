@@ -61,13 +61,15 @@ async def save_user_goals(current_user, goals: UserGoals):
     
     # Also update the primary user_metrics for consistency if needed
     if goals_dict.get("goals"):
-        # We store the primary goal (first one) in metrics for simplicity in some lookups
+        # We store both the primary goal (first one) and the full list in metrics
         await db.user_metrics.update_one(
             {"user_id": str(current_user.id)},
             {"$set": {
                 "goal": goals_dict["goals"][0],
+                "goals": goals_dict["goals"], # Full list of goals
                 "weight_goal": goals_dict.get("weight_goal"),
-                "calories_goal": goals_dict.get("calories_goal")
+                "calories_goal": goals_dict.get("calories_goal"),
+                "gym_level": goals_dict.get("gym_level")
             }}
         )
     
@@ -82,7 +84,14 @@ async def update_user_metrics(current_user, activity_level: str):
 
 async def get_user_metrics(current_user):
     db = get_database()
-    metrics = await db.user_metrics.find_one({"user_id": str(current_user.id)})
+    # Check by both ID and Username to handle inconsistencies
+    metrics = await db.user_metrics.find_one({
+        "$or": [
+            {"user_id": str(current_user.id)},
+            {"user_id": current_user.username},
+            {"name": current_user.username}
+        ]
+    })
     if metrics:
         metrics["_id"] = str(metrics["_id"])
         return metrics
@@ -119,3 +128,11 @@ async def save_user_food_preferences(current_user, prefs: UserFoodPreferences):
     )
     
     return result.upserted_id or str(current_user.id)
+
+async def reset_password(current_user, new_password: str):
+    db = get_database()
+    hashed_password = get_password_hash(new_password)
+    await db.users.update_one(
+        {"username": current_user.username},
+        {"$set": {"hashed_password": hashed_password}}
+    )

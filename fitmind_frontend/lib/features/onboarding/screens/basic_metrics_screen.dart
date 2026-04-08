@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/api_constants.dart';
+import '../../../core/constants/app_colors.dart';
 
 class BasicMetricsScreen extends StatefulWidget {
   const BasicMetricsScreen({super.key});
@@ -17,238 +18,183 @@ class _BasicMetricsScreenState extends State<BasicMetricsScreen> {
   final TextEditingController _heightController = TextEditingController();
   final TextEditingController _weightController = TextEditingController();
   String _gender = '';
+  bool _isLoading = false;
 
   void _next() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (_gender.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select gender')),
-      );
+    if (!_formKey.currentState!.validate() || _gender.isEmpty) {
+      if (_gender.isEmpty) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select gender')));
       return;
     }
+    setState(() => _isLoading = true);
 
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
-    if (token == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Not authenticated')),
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      final double h = double.parse(_heightController.text);
+      final double w = double.parse(_weightController.text);
+      final double bmi = w / ((h / 100) * (h / 100));
+
+      final response = await http.post(
+        Uri.parse('${ApiConstants.baseUrl}/user/metrics'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: json.encode({
+          'age': int.parse(_ageController.text),
+          'gender': _gender,
+          'height': h, 'weight': w, 'bmi': bmi,
+        }),
       );
-      return;
+
+      if (response.statusCode == 200) {
+        Navigator.pushNamed(context, '/goal-selection');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to save metrics')));
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Connection error')));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-
-    final double height = double.parse(_heightController.text);
-    final double weight = double.parse(_weightController.text);
-    final double bmi = weight / ((height / 100) * (height / 100));
-
-    final response = await http.post(
-      Uri.parse('${ApiConstants.baseUrl}/user/metrics'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: json.encode({
-        'age': int.parse(_ageController.text),
-        'gender': _gender,
-        'height': height,
-        'weight': weight,
-        'bmi': bmi,
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Metrics saved successfully')),
-      );
-      Navigator.pushNamed(context, '/goal-selection');
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to save metrics')),
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    _ageController.dispose();
-    _heightController.dispose();
-    _weightController.dispose();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
-            // Step indicator
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(4, (index) => Container(
-                  width: 40,
-                  height: 40,
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: index == 0 ? const Color(0xFF3B82F6) : const Color(0xFF374151),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '${index + 1}',
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ),
-                )),
-              ),
-            ),
+            _buildProgress(0),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1F2937),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Basic Metrics',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        TextFormField(
-                          controller: _ageController,
-                          decoration: InputDecoration(
-                            labelText: 'Age',
-                            labelStyle: const TextStyle(color: Colors.white),
-                            filled: true,
-                            fillColor: const Color(0xFF374151),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          style: const TextStyle(color: Colors.white),
-                          keyboardType: TextInputType.number,
-                          validator: (value) => value!.isEmpty ? 'Enter age' : null,
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Gender',
-                          style: TextStyle(color: Colors.white, fontSize: 16),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: () => setState(() => _gender = 'male'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: _gender == 'male' ? const Color(0xFF3B82F6) : const Color(0xFF374151),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: const Text('Male', style: TextStyle(color: Colors.white)),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: () => setState(() => _gender = 'female'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: _gender == 'female' ? const Color(0xFF3B82F6) : const Color(0xFF374151),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: const Text('Female', style: TextStyle(color: Colors.white)),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _heightController,
-                          decoration: InputDecoration(
-                            labelText: 'Height (cm)',
-                            labelStyle: const TextStyle(color: Colors.white),
-                            filled: true,
-                            fillColor: const Color(0xFF374151),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          style: const TextStyle(color: Colors.white),
-                          keyboardType: TextInputType.number,
-                          validator: (value) => value!.isEmpty ? 'Enter height' : null,
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _weightController,
-                          decoration: InputDecoration(
-                            labelText: 'Weight (kg)',
-                            labelStyle: const TextStyle(color: Colors.white),
-                            filled: true,
-                            fillColor: const Color(0xFF374151),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          style: const TextStyle(color: Colors.white),
-                          keyboardType: TextInputType.number,
-                          validator: (value) => value!.isEmpty ? 'Enter weight' : null,
-                        ),
-                      ],
-                    ),
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 40),
+                      _buildHeader('Biometric Calibration', 'Enter your foundational markers'),
+                      const SizedBox(height: 32),
+                      _buildFieldLabel('SELECT GENDER'),
+                      _buildGenderSelection(),
+                      const SizedBox(height: 32),
+                      _buildFieldLabel('CURRENT AGE'),
+                      _buildTextField(_ageController, 'Years', Icons.cake_outlined),
+                      const SizedBox(height: 32),
+                      _buildFieldLabel('STATURE & MASS'),
+                      Row(
+                        children: [
+                          Expanded(child: _buildTextField(_heightController, 'Height (cm)', Icons.height_rounded)),
+                          const SizedBox(width: 16),
+                          Expanded(child: _buildTextField(_weightController, 'Weight (kg)', Icons.monitor_weight_outlined)),
+                        ],
+                      ),
+                      const SizedBox(height: 40),
+                    ],
                   ),
                 ),
               ),
             ),
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: Container(
-                width: double.infinity,
-                height: 50,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ),
-                ),
-                child: ElevatedButton(
-                  onPressed: _next,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text(
-                    'Next',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            _buildNextButton(),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProgress(int step) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+      child: Row(
+        children: List.generate(4, (index) => Expanded(
+          child: Container(
+            height: 4,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            decoration: BoxDecoration(
+              color: index <= step ? AppColors.primary : AppColors.textPrimary.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(2),
+              boxShadow: index <= step ? [BoxShadow(color: AppColors.primaryWithOpacity(0.3), blurRadius: 8)] : null,
+            ),
+          ),
+        )),
+      ),
+    );
+  }
+
+  Widget _buildHeader(String title, String sub) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(color: AppColors.textPrimary, fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
+        const SizedBox(height: 8),
+        Text(sub, style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+      ],
+    );
+  }
+
+  Widget _buildFieldLabel(String label) => Padding(padding: const EdgeInsets.only(bottom: 12, left: 4), child: Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)));
+
+  Widget _buildGenderSelection() {
+    return Row(
+      children: [
+        _buildGenderCard('male', Icons.male_rounded, 'Male'),
+        const SizedBox(width: 16),
+        _buildGenderCard('female', Icons.female_rounded, 'Female'),
+      ],
+    );
+  }
+
+  Widget _buildGenderCard(String value, IconData icon, String label) {
+    bool isSelected = _gender == value;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _gender = value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primaryWithOpacity(0.1) : AppColors.cardBackground,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: isSelected ? AppColors.primary : AppColors.textPrimary.withOpacity(0.05), width: 1.5),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: isSelected ? AppColors.primary : AppColors.textDim, size: 32),
+              const SizedBox(height: 8),
+              Text(label, style: TextStyle(color: isSelected ? AppColors.textPrimary : AppColors.textSecondary, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField(TextEditingController controller, String hint, IconData icon) {
+    return Container(
+      decoration: BoxDecoration(color: AppColors.cardBackground, borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.textPrimary.withOpacity(0.05))),
+      child: TextFormField(
+        controller: controller, keyboardType: TextInputType.number, style: const TextStyle(color: AppColors.textPrimary),
+        decoration: InputDecoration(
+          prefixIcon: Icon(icon, color: AppColors.primary, size: 18),
+          hintText: hint, hintStyle: TextStyle(color: AppColors.textDim, fontSize: 14),
+          border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        ),
+        validator: (v) => v!.isEmpty ? 'Required' : null,
+      ),
+    );
+  }
+
+  Widget _buildNextButton() {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: SizedBox(
+        width: double.infinity, height: 64,
+        child: ElevatedButton(
+          onPressed: _isLoading ? null : _next,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            elevation: 8, shadowColor: AppColors.primaryWithOpacity(0.4),
+          ),
+          child: _isLoading ? const CircularProgressIndicator(color: AppColors.textPrimary) : const Text('Continue Alignment', style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
         ),
       ),
     );

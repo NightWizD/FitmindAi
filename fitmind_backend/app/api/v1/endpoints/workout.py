@@ -23,11 +23,28 @@ async def get_workout_plans(current_user=Depends(get_current_user)):
         plans.append({
             "id": str(plan_doc["_id"]),
             "name": name,
+            "is_active": plan_doc.get("is_active", False),
             "created_at": plan_doc["created_at"],
             "weekly_split": plan_doc["plan"].get("weekly_split", "General Plan")
         })
         plan_number += 1
     return plans
+
+@router.get("/active")
+async def get_active_workout(current_user=Depends(get_current_user)):
+    db = get_database()
+    plan_doc = await db.user_workout_plans.find_one({
+        "user_id": str(current_user.id),
+        "is_active": True
+    })
+    if plan_doc:
+        return {
+            "id": str(plan_doc["_id"]),
+            "name": plan_doc.get("name", "Active Protocol"),
+            "plan": plan_doc["plan"],
+            "created_at": plan_doc["created_at"]
+        }
+    return None
 
 @router.get("/{plan_id}")
 async def get_workout_plan(plan_id: str, current_user=Depends(get_current_user)):
@@ -41,12 +58,40 @@ async def get_workout_plan(plan_id: str, current_user=Depends(get_current_user))
             return {
                 "id": str(plan_doc["_id"]),
                 "name": plan_doc.get("name", "Workout Plan"),
+                "is_active": plan_doc.get("is_active", False),
                 "plan": plan_doc["plan"],
                 "created_at": plan_doc["created_at"]
             }
         raise HTTPException(status_code=404, detail="Workout plan not found")
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid plan ID")
+
+@router.post("/{plan_id}/activate")
+async def activate_workout_plan(plan_id: str, current_user=Depends(get_current_user)):
+    db = get_database()
+    try:
+        # 1. Deactivate all existing active plans for this user
+        await db.user_workout_plans.update_many(
+            {"user_id": str(current_user.id), "is_active": True},
+            {"$set": {"is_active": False}}
+        )
+        
+        # 2. Activate the target plan
+        result = await db.user_workout_plans.update_one(
+            {"_id": ObjectId(plan_id), "user_id": str(current_user.id)},
+            {"$set": {"is_active": True}}
+        )
+        
+        if result.modified_count == 0:
+            # Check if it was already active
+            plan = await db.user_workout_plans.find_one({"_id": ObjectId(plan_id)})
+            if not plan:
+                raise HTTPException(status_code=404, detail="Workout plan not found")
+        
+        return {"message": "Workout protocol activated", "is_active": True}
+    except Exception as e:
+        if isinstance(e, HTTPException): raise e
+        raise HTTPException(status_code=400, detail="Failed to activate protocol")
 
 @router.delete("/{plan_id}")
 async def delete_workout_plan(plan_id: str, current_user=Depends(get_current_user)):

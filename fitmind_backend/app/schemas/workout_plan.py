@@ -1,10 +1,10 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Union
 
 class Exercise(BaseModel):
     name: str
-    sets: int
-    reps: str
+    sets: Union[int, str]
+    reps: Union[int, str]
 
 class Day(BaseModel):
     day: str

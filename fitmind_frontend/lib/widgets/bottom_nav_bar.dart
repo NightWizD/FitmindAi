@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/constants/app_colors.dart';
 
 class BottomNavBar extends StatelessWidget {
   final int currentIndex;
@@ -12,14 +13,12 @@ class BottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Positioned(
-      bottom: 16,
-      left: 16,
-      right: 16,
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
       child: Container(
         height: 70,
         decoration: BoxDecoration(
-          color: const Color(0xFF1F2937),
+          color: AppColors.secondaryCard,
           borderRadius: BorderRadius.circular(25),
           boxShadow: [
             BoxShadow(
@@ -39,12 +38,12 @@ class BottomNavBar extends StatelessWidget {
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: isSelected ? const Color(0xFF3B82F6) : Colors.transparent,
+                  color: isSelected ? AppColors.primary : Colors.transparent,
                   borderRadius: BorderRadius.circular(15),
                 ),
                 child: Icon(
-                  [Icons.dashboard, Icons.fitness_center, Icons.restaurant, Icons.person][index],
-                  color: isSelected ? Colors.white : Colors.grey[400],
+                  [Icons.dashboard, Icons.fitness_center_rounded, Icons.restaurant_menu_rounded, Icons.person_rounded][index],
+                  color: isSelected ? Colors.white : AppColors.textDim,
                   size: 28,
                 ),
               ),

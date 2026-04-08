@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/api_constants.dart';
+import '../../../core/constants/app_colors.dart';
 
 class ActivityLevelSelectionScreen extends StatefulWidget {
   const ActivityLevelSelectionScreen({super.key});
@@ -13,182 +14,153 @@ class ActivityLevelSelectionScreen extends StatefulWidget {
 
 class _ActivityLevelSelectionScreenState extends State<ActivityLevelSelectionScreen> {
   String _selectedLevel = '';
+  bool _isLoading = false;
 
   final List<Map<String, dynamic>> levels = [
-    {'name': 'Sedentary', 'icon': Icons.chair},
-    {'name': 'Lightly Active', 'icon': Icons.directions_walk},
-    {'name': 'Moderately Active', 'icon': Icons.directions_run},
-    {'name': 'Very Active', 'icon': Icons.fitness_center},
-    {'name': 'Athlete', 'icon': Icons.sports_soccer},
+    {'name': 'Sedentary', 'icon': Icons.chair_rounded, 'desc': 'Minimal physical output'},
+    {'name': 'Lightly Active', 'icon': Icons.directions_walk_rounded, 'desc': 'Light exercise 1-3 days/week'},
+    {'name': 'Moderately Active', 'icon': Icons.directions_run_rounded, 'desc': 'Steady exercise 3-5 days/week'},
+    {'name': 'Very Active', 'icon': Icons.fitness_center_rounded, 'desc': 'Hard exercise 6-7 days/week'},
+    {'name': 'Elite Athlete', 'icon': Icons.bolt_rounded, 'desc': 'Professional training load'},
   ];
 
   void _selectLevel(String level) {
-    setState(() {
-      _selectedLevel = level;
-    });
+    setState(() => _selectedLevel = level);
   }
 
   void _continue() async {
     if (_selectedLevel.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select an activity level')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select an activity level')));
       return;
     }
+    setState(() => _isLoading = true);
 
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
-    if (token == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Not authenticated')),
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      final response = await http.put(
+        Uri.parse('${ApiConstants.baseUrl}/user/update-metrics'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+        body: json.encode({'activity_level': _selectedLevel}),
       );
-      return;
-    }
 
-    final response = await http.put(
-      Uri.parse('${ApiConstants.baseUrl}/user/update-metrics'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: json.encode({
-        'activity_level': _selectedLevel,
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Activity level saved successfully')),
-      );
-      Navigator.pushNamed(context, '/food-preference');
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to save activity level')),
-      );
+      if (response.statusCode == 200) {
+        Navigator.pushNamed(context, '/food-preference');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Connection error')));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
-            // Step indicator
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(4, (index) => Container(
-                  width: 40,
-                  height: 40,
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: index < 3 ? const Color(0xFF3B82F6) : const Color(0xFF374151),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '${index + 1}',
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ),
-                )),
-              ),
-            ),
+            _buildProgress(2),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Select Your Activity Level',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    ...levels.map((level) => GestureDetector(
-                      onTap: () => _selectLevel(level['name']),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1F2937),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: _selectedLevel == level['name'] ? const Color(0xFF3B82F6) : Colors.transparent,
-                            width: 2,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              level['icon'],
-                              color: _selectedLevel == level['name'] ? const Color(0xFF3B82F6) : Colors.grey,
-                              size: 32,
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Text(
-                                level['name'],
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                            Icon(
-                              _selectedLevel == level['name'] ? Icons.check_circle : Icons.radio_button_unchecked,
-                              color: _selectedLevel == level['name'] ? const Color(0xFF3B82F6) : Colors.grey,
-                            ),
-                          ],
-                        ),
-                      ),
-                    )),
+                    const SizedBox(height: 40),
+                    _buildHeader('Metabolic Tier', 'Define your daily energy output'),
+                    const SizedBox(height: 32),
+                    ...levels.map((l) => _buildLevelCard(l)),
+                    const SizedBox(height: 40),
                   ],
                 ),
               ),
             ),
+            _buildNextButton(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProgress(int step) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+      child: Row(
+        children: List.generate(4, (index) => Expanded(
+          child: Container(
+            height: 4, margin: const EdgeInsets.symmetric(horizontal: 2),
+            decoration: BoxDecoration(
+              color: index <= step ? AppColors.primary : AppColors.textPrimary.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(2),
+              boxShadow: index <= step ? [BoxShadow(color: AppColors.primaryWithOpacity(0.3), blurRadius: 8)] : null,
+            ),
+          ),
+        )),
+      ),
+    );
+  }
+
+  Widget _buildHeader(String title, String sub) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(color: AppColors.textPrimary, fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
+        const SizedBox(height: 8),
+        Text(sub, style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+      ],
+    );
+  }
+
+  Widget _buildLevelCard(Map<String, dynamic> level) {
+    bool isSelected = _selectedLevel == level['name'];
+    return GestureDetector(
+      onTap: () => _selectLevel(level['name']),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primaryWithOpacity(0.1) : AppColors.cardBackground,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: isSelected ? AppColors.primary : AppColors.textPrimary.withOpacity(0.05), width: 1.5),
+        ),
+        child: Row(
+          children: [
             Container(
-              padding: const EdgeInsets.all(16),
-              child: Container(
-                width: double.infinity,
-                height: 50,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ),
-                ),
-                child: ElevatedButton(
-                  onPressed: _continue,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text(
-                    'Continue',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: (isSelected ? AppColors.primary : AppColors.textPrimary).withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
+              child: Icon(level['icon'], color: isSelected ? AppColors.primary : AppColors.textDim, size: 24),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(level['name'], style: TextStyle(color: isSelected ? AppColors.textPrimary : AppColors.textSecondary, fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text(level['desc'], style: TextStyle(color: AppColors.textPrimary.withOpacity(isSelected ? 0.5 : 0.2), fontSize: 12)),
+                ],
               ),
             ),
+            if (isSelected) const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 24),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNextButton() {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: SizedBox(
+        width: double.infinity, height: 64,
+        child: ElevatedButton(
+          onPressed: _isLoading ? null : _continue,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            elevation: 8, shadowColor: AppColors.primaryWithOpacity(0.4),
+          ),
+          child: _isLoading ? const CircularProgressIndicator(color: AppColors.textPrimary) : const Text('Synchronize Output', style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
         ),
       ),
     );

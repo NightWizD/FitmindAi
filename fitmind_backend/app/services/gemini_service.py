@@ -10,6 +10,29 @@ logger = logging.getLogger(__name__)
 # Initialize the client
 client = genai.Client(api_key=settings.gemini_api_key)
 
+def get_model_response(model_id, contents):
+    """
+    Generate content with exponential backoff retry logic for 503/429 errors.
+    """
+    max_retries = 3
+    base_delay = 2 # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model=model_id,
+                contents=contents
+            )
+            return response
+        except Exception as e:
+            error_str = str(e)
+            if ("503" in error_str or "429" in error_str) and attempt < max_retries - 1:
+                delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                logger.warning(f"AI Service busy ({error_str}). Retrying in {delay:.1f}s (Attempt {attempt + 1}/{max_retries})")
+                time.sleep(delay)
+                continue
+            raise e
+
 async def generate_workout_plan(user_data, preferences):
     """
     Generate a personalized workout plan using Google Gemini AI
@@ -51,7 +74,7 @@ User Profile:
 - Height: {user_data.get('height', 170)} cm
 - Weight: {user_data.get('weight', 70)} kg
 - BMI: {bmi:.1f} ({bmi_category})
-- Fitness Goal: {user_data.get('goal', 'General Fitness')}
+- Fitness Goal: {", ".join(user_data.get('goals', [])) if user_data.get('goals') else user_data.get('goal', 'General Fitness')}
 - Activity Level: {user_data.get('activity_level', 'Moderately Active')}
 
 Training Preferences:
@@ -121,21 +144,9 @@ Required JSON Structure:
 Generate a UNIQUE workout plan for session {unique_seed} now:
 """
 
-        # Initialize Gemini model
-        try:
-            # List available models for debugging
-            models = client.models.list()
-            available_models = [model.name for model in models if 'generateContent' in model.supported_generation_methods]
-            logger.info(f"Available models with generateContent: {available_models}")
-        except Exception as e:
-            logger.error(f"Error listing models: {e}")
-
-        # Generate response
-        logger.info("Calling Gemini AI for workout plan generation")
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt
-        )
+        # Generate response using retry logic
+        logger.info("Calling Gemini AI (gemini-2.5-flash-lite) for workout plan generation")
+        response = get_model_response('gemini-2.5-flash-lite', prompt)
 
         if not response or not hasattr(response, 'text'):
             logger.error("No response from Gemini AI")
@@ -291,16 +302,38 @@ async def generate_meal_plan(user_data, preferences):
         else:
             bmi_category = "Obese"
 
+        # Goal and Activity Level for calculations
+        goal = ", ".join(user_data.get('goals', [])) if user_data.get('goals') else user_data.get('goal', 'General Fitness')
+        activity_level = user_data.get('activity_level', 'Moderately Active')
+        
+        # Macro ratios
+        if goal in ['Muscle Gain', 'General Fitness']:
+            protein_ratio, carb_ratio, fat_ratio = 0.25, 0.45, 0.30
+        elif goal in ['Weight Loss', 'Fat Loss']:
+            protein_ratio, carb_ratio, fat_ratio = 0.30, 0.40, 0.30
+        else:
+            protein_ratio, carb_ratio, fat_ratio = 0.20, 0.50, 0.30
+
+        # Activity multipliers
+        activity_multipliers = {
+            'Sedentary': 1.2,
+            'Lightly Active': 1.375,
+            'Moderately Active': 1.55,
+            'Very Active': 1.725,
+            'Extremely Active': 1.9
+        }
+
         # Build comprehensive prompt with unique seed
         prompt = f"""
-Generate a UNIQUE personalized daily meal plan in JSON format with Indian food options.
+Generate a COMPLETELY UNIQUE personalized daily meal plan in JSON format with varied Indian food options.
 
-SESSION: {unique_seed}
+SESSION ID: {unique_seed} - YOU MUST GENERATE A PLAN THAT IS DIFFERENT FROM ANY PREVIOUS ONES.
+DO NOT REPEAT THE SAME MEALS. VARIETY IS CRITICAL.
 
 USER PROFILE:
 - Age: {user_data.get('age', 25)}, Gender: {user_data.get('gender', 'Male')}
 - Height: {user_data.get('height', 170)}cm, Weight: {user_data.get('weight', 70)}kg, BMI: {bmi:.1f} ({bmi_category})
-- Goal: {user_data.get('goal', 'General Fitness')}, Activity: {user_data.get('activity_level', 'Moderately Active')}
+- Goal: {goal}, Activity: {activity_level}
 
 PREFERENCES:
 - Food Type: {preferences.get('food_preference', 'veg')}
@@ -320,9 +353,11 @@ REQUIREMENTS:
 - Create {preferences.get('meals_per_day', 3)} meals with specific quantities
 - Respect food preference and STRICTLY AVOID allergies
 - MUST incorporate the provided 'Daily Foods' reasonably across the meals
-- Include traditional Indian foods with modern nutrition
+- Portion Sizes: ALWAYS use Grams (g) for food quantities (e.g., "150g") instead of subjective units like "cups", "servings", or "bowls".
+- Include traditional Indian foods with modern nutrition (e.g. Millet-based foods, varied protein sources)
 - Balance nutrition based on goal and activity level
-- Return ONLY valid JSON
+- VARIETY RULE: Choose different dishes, spices, and ingredients for every single response.
+- Return ONLY valid JSON, no additional text
 
 {{
   "daily_calories": target_calories,
@@ -340,21 +375,9 @@ REQUIREMENTS:
 Generate unique plan for session {unique_seed}:
 """
 
-        # Initialize Gemini model
-        try:
-            # List available models for debugging
-            models = client.models.list()
-            available_models = [model.name for model in models if 'generateContent' in model.supported_generation_methods]
-            logger.info(f"Available models with generateContent: {available_models}")
-        except Exception as e:
-            logger.error(f"Error listing models: {e}")
-
-        # Generate response
-        logger.info("Calling Gemini AI for meal plan generation")
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt
-        )
+        # Generate response using retry logic
+        logger.info("Calling Gemini AI (gemini-2.5-flash-lite) for meal plan generation")
+        response = get_model_response('gemini-2.5-flash-lite', prompt)
 
         if not response or not response.text:
             logger.error("No response from Gemini AI")
@@ -362,8 +385,7 @@ Generate unique plan for session {unique_seed}:
 
         # Clean and parse JSON response
         text_response = response.text.strip()
-        logger.info(f"Gemini response: {text_response[:200]}...")
-
+        
         # Remove markdown code blocks if present
         if text_response.startswith('```json'):
             text_response = text_response[7:]
@@ -379,259 +401,202 @@ Generate unique plan for session {unique_seed}:
             return meal_plan
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON from Gemini: {e}")
-            logger.error(f"Response text: {text_response}")
             raise ValueError(f"Invalid JSON response from AI: {e}")
 
     except Exception as e:
         logger.error(f"Error in Gemini meal service: {str(e)}")
-        # Return personalized fallback meal plan that respects preferences and user metrics
-        food_pref = preferences.get('food_preference', 'veg')
-        allergies = preferences.get('allergies', [])
-        meals_per_day = preferences.get('meals_per_day', 3)
-
-        # Calculate personalized calories based on user goals
-        goal = user_data.get('goal', 'General Fitness')
-        activity_level = user_data.get('activity_level', 'Moderately Active')
-        bmi = user_data.get('bmi', 22.5)
-        age = user_data.get('age', 25)
-        gender = user_data.get('gender', 'Male')
-        height = user_data.get('height', 170)
-        weight = user_data.get('weight', 70)
-
-        # BMR calculation
-        if gender.lower() == 'male':
-            bmr = 10 * weight + 6.25 * height - 5 * age + 5
-        else:
-            bmr = 10 * weight + 6.25 * height - 5 * age - 161
-
-        # Activity multipliers
-        activity_multipliers = {
-            'Sedentary': 1.2,
-            'Lightly Active': 1.375,
-            'Moderately Active': 1.55,
-            'Very Active': 1.725,
-            'Extremely Active': 1.9
-        }
-
-        tdee = bmr * activity_multipliers.get(activity_level, 1.55)
-
-        # Goal-based calorie adjustments
-        goal_calories = {
-            'Weight Loss': tdee - 500,
-            'Muscle Gain': tdee + 300,
-            'General Fitness': tdee,
-            'Weight Maintenance': tdee,
-            'Fat Loss': tdee - 500,
-            'Endurance Training': tdee + 200
-        }
-
-        if user_data.get('calories_goal'):
-            target_calories = user_data.get('calories_goal')
-        else:
-            target_calories = goal_calories.get(goal, tdee)
-            target_calories = max(1200, min(4000, target_calories))  # Clamp between 1200-4000 calories
-
-        # Base meal structures with personalized portions
-        if food_pref == 'veg':
-            meal_options = [
-                {
-                    "type": "Breakfast",
-                    "items": [
-                        {"name": "Oats", "quantity": f"{min(80, target_calories // 20)}g"},
-                        {"name": "Milk", "quantity": "1 cup"},
-                        {"name": "Banana", "quantity": "1 medium"},
-                        {"name": "Almonds", "quantity": f"{min(15, target_calories // 60)} pieces"}
-                    ],
-                    "calories": min(450, target_calories // 4),
-                    "description": f"High-protein breakfast optimized for {goal} with complex carbs and healthy fats"
-                },
-                {
-                    "type": "Lunch",
-                    "items": [
-                        {"name": "Brown Rice", "quantity": f"{min(150, target_calories // 15)}g"},
-                        {"name": "Dal", "quantity": "1 cup"},
-                        {"name": "Mixed Vegetables", "quantity": f"{min(250, target_calories // 8)}g"},
-                        {"name": "Curd", "quantity": f"{min(150, target_calories // 13)}g"}
-                    ],
-                    "calories": min(550, target_calories // 3),
-                    "description": f"Balanced lunch with lean protein and fiber-rich vegetables for sustained energy during {activity_level.lower()} activity"
-                },
-                {
-                    "type": "Dinner",
-                    "items": [
-                        {"name": "Roti", "quantity": f"{min(3, target_calories // 150)} pieces"},
-                        {"name": "Paneer Sabzi", "quantity": f"{min(200, target_calories // 10)}g"},
-                        {"name": "Green Salad", "quantity": "1 bowl"}
-                    ],
-                    "calories": min(500, target_calories // 3),
-                    "description": f"Light dinner with high-quality protein for muscle recovery and repair supporting {goal}"
-                },
-                {
-                    "type": "Snack",
-                    "items": [
-                        {"name": "Greek Yogurt", "quantity": f"{min(150, target_calories // 13)}g"},
-                        {"name": "Fruits", "quantity": "1 cup"},
-                        {"name": "Nuts", "quantity": f"{min(20, target_calories // 40)}g"}
-                    ],
-                    "calories": min(250, target_calories // 8),
-                    "description": f"Nutrient-dense snack providing sustained energy and supporting {goal} goals"
-                }
-            ]
-        elif food_pref == 'non-veg':
-            meal_options = [
-                {
-                    "type": "Breakfast",
-                    "items": [
-                        {"name": "Eggs", "quantity": f"{min(3, target_calories // 150)} pieces"},
-                        {"name": "Whole Wheat Bread", "quantity": f"{min(3, target_calories // 100)} slices"},
-                        {"name": "Chicken Sausage", "quantity": f"{min(50, target_calories // 40)}g"}
-                    ],
-                    "calories": min(500, target_calories // 4),
-                    "description": f"High-protein breakfast with complete amino acids to support {goal} and muscle maintenance"
-                },
-                {
-                    "type": "Lunch",
-                    "items": [
-                        {"name": "Chicken Curry", "quantity": f"{min(200, target_calories // 10)}g"},
-                        {"name": "Rice", "quantity": f"{min(150, target_calories // 15)}g"},
-                        {"name": "Mixed Vegetables", "quantity": f"{min(250, target_calories // 8)}g"}
-                    ],
-                    "calories": min(600, target_calories // 3),
-                    "description": f"Lean protein-focused lunch optimized for post-workout recovery and {activity_level.lower()} lifestyle"
-                },
-                {
-                    "type": "Dinner",
-                    "items": [
-                        {"name": "Grilled Fish", "quantity": f"{min(200, target_calories // 10)}g"},
-                        {"name": "Roti", "quantity": f"{min(3, target_calories // 150)} pieces"},
-                        {"name": "Salad", "quantity": "1 bowl"}
-                    ],
-                    "calories": min(550, target_calories // 3),
-                    "description": f"Omega-3 rich dinner supporting heart health and recovery for {goal} goals"
-                },
-                {
-                    "type": "Snack",
-                    "items": [
-                        {"name": "Boiled Eggs", "quantity": f"{min(2, target_calories // 150)} pieces"},
-                        {"name": "Fruits", "quantity": "1 medium"}
-                    ],
-                    "calories": min(200, target_calories // 8),
-                    "description": f"Quick protein boost to maintain muscle mass during {goal}"
-                }
-            ]
-        elif food_pref == 'vegan':
-            meal_options = [
-                {
-                    "type": "Breakfast",
-                    "items": [
-                        {"name": "Oatmeal", "quantity": f"{min(80, target_calories // 20)}g"},
-                        {"name": "Plant-based Milk", "quantity": "1 cup"},
-                        {"name": "Chia Seeds", "quantity": f"{min(15, target_calories // 60)}g"},
-                        {"name": "Fruits", "quantity": "1 cup"}
-                    ],
-                    "calories": min(450, target_calories // 4),
-                    "description": f"Plant-based breakfast with complete protein sources for {goal} and sustained energy"
-                },
-                {
-                    "type": "Lunch",
-                    "items": [
-                        {"name": "Quinoa", "quantity": f"{min(150, target_calories // 15)}g"},
-                        {"name": "Chickpea Curry", "quantity": f"{min(200, target_calories // 10)}g"},
-                        {"name": "Mixed Vegetables", "quantity": f"{min(250, target_calories // 8)}g"}
-                    ],
-                    "calories": min(550, target_calories // 3),
-                    "description": f"Complete protein lunch with fiber-rich vegetables supporting {activity_level.lower()} activity levels"
-                },
-                {
-                    "type": "Dinner",
-                    "items": [
-                        {"name": "Brown Rice", "quantity": f"{min(150, target_calories // 15)}g"},
-                        {"name": "Tofu Stir Fry", "quantity": f"{min(200, target_calories // 10)}g"},
-                        {"name": "Green Salad", "quantity": "1 bowl"}
-                    ],
-                    "calories": min(500, target_calories // 3),
-                    "description": f"Plant-based dinner with antioxidants and phytonutrients for recovery and {goal}"
-                },
-                {
-                    "type": "Snack",
-                    "items": [
-                        {"name": "Mixed Nuts", "quantity": f"{min(30, target_calories // 30)}g"},
-                        {"name": "Fresh Fruits", "quantity": "1 cup"}
-                    ],
-                    "calories": min(250, target_calories // 8),
-                    "description": f"Healthy fats and micronutrients to support overall health during {goal}"
-                }
-            ]
-        else:  # eggitarian
-            meal_options = [
-                {
-                    "type": "Breakfast",
-                    "items": [
-                        {"name": "Eggs", "quantity": f"{min(3, target_calories // 150)} pieces"},
-                        {"name": "Toast", "quantity": f"{min(3, target_calories // 100)} slices"},
-                        {"name": "Avocado", "quantity": f"{min(50, target_calories // 40)}g"}
-                    ],
-                    "calories": min(500, target_calories // 4),
-                    "description": f"Nutrient-dense breakfast with healthy fats for brain function and {goal} support"
-                },
-                {
-                    "type": "Lunch",
-                    "items": [
-                        {"name": "Rice", "quantity": f"{min(150, target_calories // 15)}g"},
-                        {"name": "Egg Curry", "quantity": f"{min(200, target_calories // 10)}g"},
-                        {"name": "Vegetables", "quantity": f"{min(250, target_calories // 8)}g"}
-                    ],
-                    "calories": min(550, target_calories // 3),
-                    "description": f"Balanced lunch with complete proteins and vegetables for {activity_level.lower()} energy needs"
-                },
-                {
-                    "type": "Dinner",
-                    "items": [
-                        {"name": "Roti", "quantity": f"{min(3, target_calories // 150)} pieces"},
-                        {"name": "Paneer", "quantity": f"{min(200, target_calories // 10)}g"},
-                        {"name": "Curd", "quantity": f"{min(150, target_calories // 13)}g"}
-                    ],
-                    "calories": min(500, target_calories // 3),
-                    "description": f"Calcium-rich dinner supporting bone health and muscle recovery for {goal}"
-                },
-                {
-                    "type": "Snack",
-                    "items": [
-                        {"name": "Boiled Eggs", "quantity": f"{min(2, target_calories // 150)} pieces"},
-                        {"name": "Fruits", "quantity": "1 medium"},
-                        {"name": "Cheese", "quantity": f"{min(30, target_calories // 100)}g"}
-                    ],
-                    "calories": min(250, target_calories // 8),
-                    "description": f"Balanced snack with protein and healthy fats for sustained energy"
-                }
-            ]
-
-        # Select meals based on meals_per_day
-        selected_meals = meal_options[:meals_per_day]
-
-        # Calculate actual total calories from selected meals
-        total_calories = sum(meal['calories'] for meal in selected_meals)
-
-        # Calculate macros based on goal-specific ratios
-        if goal in ['Muscle Gain', 'General Fitness']:
-            protein_ratio = 0.25
-            carb_ratio = 0.45
-            fat_ratio = 0.30
-        elif goal in ['Weight Loss', 'Fat Loss']:
-            protein_ratio = 0.30
-            carb_ratio = 0.40
-            fat_ratio = 0.30
-        else:  # Endurance, Maintenance
-            protein_ratio = 0.20
-            carb_ratio = 0.50
-            fat_ratio = 0.30
-
+        # Return personalized fallback meal plan
         return {
-            "daily_calories": total_calories,
-            "macros": {
-                "protein": f"{total_calories * protein_ratio // 4}g",
-                "carbs": f"{total_calories * carb_ratio // 4}g",
-                "fats": f"{total_calories * fat_ratio // 9}g"
-            },
-            "meals": selected_meals
+            "daily_calories": 2000,
+            "macros": {"protein": "120g", "carbs": "220g", "fats": "60g"},
+            "meals": [
+                {
+                    "type": "Breakfast",
+                    "items": [{"name": "Oats", "quantity": "80g"}, {"name": "Milk", "quantity": "250g"}],
+                    "calories": 400,
+                    "description": "Quick high-protein breakfast"
+                },
+                {
+                    "type": "Lunch",
+                    "items": [{"name": "Rice", "quantity": "150g"}, {"name": "Dal", "quantity": "200g"}],
+                    "calories": 600,
+                    "description": "Balanced lunch"
+                },
+                {
+                    "type": "Dinner",
+                    "items": [{"name": "Roti", "quantity": "2 pieces"}, {"name": "Sabzi", "quantity": "180g"}],
+                    "calories": 500,
+                    "description": "Light dinner"
+                }
+            ]
+        }
+
+async def analyze_blood_report(file_data, mime_type, user_data):
+    """
+    Analyze blood report image/PDF and suggest supplements based on markers.
+    """
+    try:
+        goal = ", ".join(user_data.get('goals', [])) if user_data.get('goals') else user_data.get('goal', 'General Fitness')
+        
+        # Build prompt for multimodal analysis
+        prompt = f"""
+You are an expert clinical nutritionist and medical report analyst. 
+Examine this blood report and provide supplement recommendations based on the detected markers and the user's fitness goals ({goal}).
+
+User Profile:
+- Age: {user_data.get('age', 25)}, Gender: {user_data.get('gender', 'Male')}
+
+Instructions:
+1. Identify any deficiencies or sub-optimal levels (e.g. Low Vitamin D, B12, Iron, etc.) from the report.
+2. Suggest 2-3 targeted supplements ONLY if the report indicates a need.
+3. Explain the "Why" using specific values found in the report.
+4. Keep the output very minimal and clinical.
+5. Return ONLY valid JSON.
+
+Required JSON Structure:
+{{
+  "report_summary": "Short summary of findings (e.g. Vitamin D is at 15ng/ml which is low)",
+  "recommendations": [
+    {{
+      "name": "Supplement Name",
+      "dosage": "Amount",
+      "timing": "When to take",
+      "reason": "Based on report value X..."
+    }}
+  ],
+  "is_clinical": true
+}}
+
+Return ONLY valid JSON:
+"""
+        # Create part for the file
+        parts = [
+            {"inline_data": {"mime_type": mime_type, "data": file_data}},
+            prompt
+        ]
+
+        # Generate response using retry logic
+        logger.info(f"Calling Gemini AI (gemini-2.5-flash-lite) for blood report analysis (type: {mime_type})")
+        response = get_model_response('gemini-2.5-flash-lite', parts)
+
+        if not response or not response.text:
+            raise ValueError("No response from AI")
+
+        # Clean and parse JSON
+        text_response = response.text.strip()
+        if text_response.startswith('```json'):
+            text_response = text_response[7:]
+        if text_response.endswith('```'):
+            text_response = text_response[:-3]
+        
+        return json.loads(text_response.strip())
+
+    except Exception as e:
+        logger.error(f"Error in blood report analysis: {str(e)}")
+        return {
+            "report_summary": "Error analyzing report. Please ensure the image is clear and readable.",
+            "recommendations": [],
+            "is_clinical": False
+        }
+
+async def generate_supplements(user_data):
+    """
+    Generate personalized supplement suggestions using Google Gemini AI
+    """
+    try:
+        # Determine BMI category for added context
+        # Handle both dict and object types for user_data
+        if hasattr(user_data, 'dict'):
+             user_data_dict = user_data.dict()
+        elif isinstance(user_data, dict):
+             user_data_dict = user_data
+        else:
+             user_data_dict = {}
+
+        bmi = user_data_dict.get('bmi', 22.5)
+        goal_list = user_data_dict.get('goals', [])
+        goal_str = ", ".join(goal_list) if goal_list else user_data_dict.get('goal', 'General Fitness')
+        
+        prompt = f"""
+You are a professional sports nutritionist. Suggest a personalized supplement stack for this user in JSON format only.
+
+User Profile:
+- Age: {user_data_dict.get('age', 25)}
+- Gender: {user_data_dict.get('gender', 'Male')}
+- BMI: {bmi:.1f}
+- Fitness Goals: {goal_str}
+- Training Level: {user_data_dict.get('gym_level', 'Beginner')}
+- Activity Level: {user_data_dict.get('activity_level', 'Moderately Active')}
+
+Instructions:
+1. Suggest 3-4 essential, safe supplements.
+2. For each, provide a very concise dosage, timing, and a one-sentence benefit.
+3. Keep descriptions extremely short (max 10 words).
+4. Provide a brief safety disclaimer.
+5. Return ONLY valid JSON.
+
+Required JSON Structure:
+{{
+  "supplements": [
+    {{
+      "name": "Supplement Name",
+      "dosage": "e.g. 5g",
+      "timing": "e.g. Post-workout",
+      "benefit": "Why this helps",
+      "description": "Brief explanation"
+    }}
+  ],
+  "safety_disclaimer": "Consult with a doctor..."
+}}
+
+Return ONLY valid JSON:
+"""
+
+        # Generate response using retry logic
+        logger.info(f"Calling Gemini AI (gemini-2.5-flash-lite) for supplement suggestions for {user_data_dict.get('name', 'Unknown')}")
+        response = get_model_response('gemini-2.5-flash-lite', prompt)
+
+        if not response or not response.text:
+            logger.error("Empty response from AI service")
+            raise ValueError("No response from AI service")
+
+        # Clean and parse JSON response
+        text_response = response.text.strip()
+        if text_response.startswith('```json'):
+            text_response = text_response[7:]
+        if text_response.endswith('```'):
+            text_response = text_response[:-3]
+
+        text_response = text_response.strip()
+
+        try:
+            suggestions = json.loads(text_response)
+            logger.info("Successfully synthesized supplement stack")
+            return suggestions
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse supplement JSON: {e}")
+            logger.debug(f"Raw response: {text_response}")
+            raise ValueError(f"Invalid JSON from AI: {e}")
+
+    except Exception as e:
+        logger.error(f"CRITICAL: Supplement Synthesis Failed: {str(e)}")
+        # Return fallback supplements
+        return {
+            "supplements": [
+                {
+                    "name": "Multivitamin",
+                    "dosage": "1 tablet",
+                    "timing": "With breakfast",
+                    "benefit": "Ensures overall micronutrient balance for recovery",
+                    "description": "A blend of essential vitamins and minerals."
+                },
+                {
+                    "name": "Fish Oil",
+                    "dosage": "1000mg",
+                    "timing": "With lunch",
+                    "benefit": "Supports joint health and reduces inflammation",
+                    "description": "Rich in Omega-3 fatty acids."
+                }
+            ],
+            "safety_disclaimer": "Safety first: Please consult a healthcare professional before adding supplements to your routine."
         }
